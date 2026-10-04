@@ -312,9 +312,11 @@ source) and the rendered `<name>.html` are versioned; archify's `*.finalize*.jso
   prompt pipeline, error mapping), ask the agent to update `candidate.json` from the code and re-run
   archify's `finalize` with `--repo-root .`, then commit both files with the change.
 - Every node cites its source files and lines; keep them pointing at real code, never at plans.
-- `estimation-flow` is the **overview**: keep it to the main request path (~10 nodes). Plumbing
-  (settings, DI, Protocols, error handlers) stays out. When a feature grows its own internals, give
-  it a separate diagram in `docs/architecture/<feature>/` and keep a single box for it in the overview.
+- `estimation-flow` is the **overview**: it shows the main request paths (stateless `/estimate` and
+  session turns). The goal is that it stays easy to understand, not a node count: add nodes when a
+  path needs them. Plumbing (settings, DI, Protocols, error handlers) stays out. Split a feature into
+  its own diagram in `docs/architecture/<feature>/` only when its internals would make the overview
+  hard to read, and keep a single box for it in the overview.
 
 ---
 
