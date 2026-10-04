@@ -17,6 +17,10 @@ class LLMProviderError(EstimationError):
     """The LLM provider failed (network, timeout, rate limit, empty answer…)."""
 
 
+class SessionNotFoundError(EstimationError):
+    """The ``session_id`` is unknown: never created, or lost on a service restart."""
+
+
 class InputRejectedError(EstimationError):
     """An input guardrail refused the description (prompt injection, moderation…).
 

@@ -1,0 +1,88 @@
+"""Session state: sliding-window history, project metadata and the in-process store."""
+
+import pytest
+from pydantic import ValidationError
+
+from app.exceptions import SessionNotFoundError
+from app.services.sessions import ConversationHistory, ProjectMetadata, SessionStore
+
+# --- ConversationHistory ----------------------------------------------------------------------
+
+
+def test_history_keeps_turns_in_chronological_order() -> None:
+    history = ConversationHistory(max_turns=3)
+    history.add_turn("u1", "a1")
+    history.add_turn("u2", "a2")
+
+    assert history.messages == [
+        {"role": "user", "content": "u1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "u2"},
+        {"role": "assistant", "content": "a2"},
+    ]
+    assert len(history) == 2
+
+
+def test_history_drops_the_oldest_whole_turns_beyond_the_window() -> None:
+    history = ConversationHistory(max_turns=2)
+    for n in range(1, 5):
+        history.add_turn(f"u{n}", f"a{n}")
+
+    assert len(history) == 2
+    assert [m["content"] for m in history.messages] == ["u3", "a3", "u4", "a4"]
+    assert history.messages[0]["role"] == "user"
+
+
+def test_history_messages_is_a_copy() -> None:
+    history = ConversationHistory()
+    history.add_turn("u1", "a1")
+
+    history.messages[0]["content"] = "tampered"
+    history.messages.clear()
+
+    assert history.messages[0]["content"] == "u1"
+
+
+def test_history_rejects_an_empty_window() -> None:
+    with pytest.raises(ValueError):
+        ConversationHistory(max_turns=0)
+
+
+# --- ProjectMetadata --------------------------------------------------------------------------
+
+
+def test_metadata_starts_empty() -> None:
+    metadata = ProjectMetadata()
+
+    assert metadata.project_name is None
+    assert metadata.assumed_team_size is None
+    assert metadata.mentioned_technologies == []
+    assert metadata.agreed_scope is None
+
+
+def test_metadata_rejects_a_non_positive_team_size() -> None:
+    with pytest.raises(ValidationError):
+        ProjectMetadata(assumed_team_size=0)
+
+
+# --- SessionStore -----------------------------------------------------------------------------
+
+
+def test_store_creates_independent_sessions_and_gets_them_back() -> None:
+    store = SessionStore(max_turns=4)
+    first = store.create()
+    second = store.create()
+
+    first.history.add_turn("u1", "a1")
+    first.metadata.project_name = "Portal"
+
+    assert first.session_id != second.session_id
+    assert store.get(first.session_id) is first
+    assert len(store.get(second.session_id).history) == 0
+    assert store.get(second.session_id).metadata.project_name is None
+    assert first.history.max_turns == 4
+
+
+def test_store_raises_a_domain_error_for_an_unknown_session() -> None:
+    with pytest.raises(SessionNotFoundError):
+        SessionStore().get("missing")
