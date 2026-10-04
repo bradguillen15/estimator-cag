@@ -369,7 +369,7 @@ pnpm test                # both suites from the repo root (API first, then UI)
 pnpm test:api            # uv run pytest  (tests/)
 pnpm test:web            # vitest run     (web/src/**/*.test.ts[x])
 pnpm test:watch          # vitest in watch mode (UI)
-pnpm test:coverage       # pytest --cov=app + vitest --coverage
+pnpm test:coverage       # pytest --cov=app + vitest --coverage (HTML report: web/coverage/index.html)
 ```
 
 - API: `pytest` + `TestClient`. `tests/conftest.py` pins fake settings and **fails any test that
@@ -380,6 +380,8 @@ pnpm test:coverage       # pytest --cov=app + vitest --coverage
 CI (`.github/workflows/ci.yml`) runs both suites on every PR to `main`. `main` is protected: changes land
 only through a PR whose `api-tests` and `web-tests` checks pass (admins included). Those job names are
 required status checks — renaming them blocks every merge until branch protection is updated.
+CI also uploads both lcov reports to [Coveralls](https://coveralls.io/github/bradguillen15/estimator-cag)
+(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). It is informational, never a required check.
 CodeRabbit reviews PRs using `.coderabbit.yaml`, which points reviewers at the rules in this file.
 While the repo has fewer than 10 stars CodeRabbit does **not** auto-review: request it on each PR
 with `@coderabbitai review` (or `@coderabbitai full review`, or tick **Trigger review** in its status
