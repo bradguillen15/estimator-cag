@@ -25,7 +25,7 @@ requests can carry PDF/Word attachments.
 - [x] T1 — Session state model: `app/services/sessions.py` (`ConversationHistory`,
   `ProjectMetadata`, `Session`, `SessionStore`) + `SessionNotFoundError` + tests. Route: inline
   (2 small files, design agreed in chat).
-- [ ] T2 — `POST /sessions`
+- [x] T2 — `POST /sessions` → 201 `{"session_id"}` (`routers/sessions.py`, `schemas/sessions.py`, `get_session_store` with `lru_cache`, `SESSION_MAX_TURNS` setting). Route: inline.
 - [ ] T3 — `project_metadata` in the system prompt
 - [ ] T4 — `POST /sessions/{session_id}/estimate` (multi-turn)
 - [ ] T5 — Attachments (PDF/Word)
@@ -36,5 +36,8 @@ requests can carry PDF/Word attachments.
 
 ## Progress
 
-- T1: done (uncommitted). 8 tests in `tests/test_sessions.py`.
+- T1: done, commit `f72cd4b`. 8 tests in `tests/test_sessions.py`.
+- T2: done. 2 route tests; `uv run pytest` exit 0. `SESSION_MAX_TURNS` added to
+  `config.py` (the user added it to `.env.example`). The conftest `client` now overrides the store
+  with a fresh `session_store` fixture per test.
 - Commits: only when the user asks.

@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from app.exceptions import InputRejectedError, LLMProviderError, PromptTemplateError, UnknownPromptVersionError
 from app.logging_config import configure_logging
-from app.routers import estimations
+from app.routers import estimations, sessions
 
 configure_logging()
 
@@ -44,6 +44,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestContextMiddleware)
 app.include_router(estimations.router, prefix="/api/v1")
+app.include_router(sessions.router, prefix="/api/v1")
 
 
 # Domain error → HTTP status. Messages are client-safe; provider details stay in the logs.

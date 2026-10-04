@@ -1,6 +1,9 @@
-"""Session state: sliding-window history, project metadata and the in-process store."""
+"""Session state (sliding-window history, project metadata, in-process store) and POST /sessions."""
+
+import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.exceptions import SessionNotFoundError
@@ -86,3 +89,31 @@ def test_store_creates_independent_sessions_and_gets_them_back() -> None:
 def test_store_raises_a_domain_error_for_an_unknown_session() -> None:
     with pytest.raises(SessionNotFoundError):
         SessionStore().get("missing")
+
+
+# --- POST /sessions ---------------------------------------------------------------------------
+
+
+def test_create_session_returns_201_with_a_uuid4(client: TestClient, session_store: SessionStore) -> None:
+    response = client.post("/api/v1/sessions")
+
+    assert response.status_code == 201
+    session_id = response.json()["session_id"]
+    assert uuid.UUID(session_id).version == 4
+    assert _store_has(session_store, session_id)
+
+
+def test_each_call_creates_a_distinct_session(client: TestClient, session_store: SessionStore) -> None:
+    first = client.post("/api/v1/sessions").json()["session_id"]
+    second = client.post("/api/v1/sessions").json()["session_id"]
+
+    assert first != second
+    assert _store_has(session_store, first) and _store_has(session_store, second)
+
+
+def _store_has(store: SessionStore, session_id: str) -> bool:
+    try:
+        store.get(session_id)
+    except SessionNotFoundError:
+        return False
+    return True
