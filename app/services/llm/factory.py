@@ -1,7 +1,7 @@
 """Builds the LLM provider (LiteLLM) from the ``LLM_MODELS`` setting."""
 
 from app.config import Settings
-from app.services.llm.base import EmbeddingProvider, ModerationProvider, StreamingLLMProvider
+from app.services.llm.base import EmbeddingProvider, EstimationLLMProvider, ModerationProvider
 from app.services.llm.embeddings import LiteLLMEmbedder
 from app.services.llm.litellm import LiteLLMProvider
 from app.services.llm.moderation import LiteLLMModerator
@@ -21,7 +21,7 @@ def _key_by_prefix(settings: Settings) -> dict[str, tuple[str, str | None]]:
     }
 
 
-def get_llm_provider(settings: Settings) -> StreamingLLMProvider:
+def get_llm_provider(settings: Settings) -> EstimationLLMProvider:
     key_by_prefix = _key_by_prefix(settings)
     if not settings.llm_models:
         raise ValueError("LLM_MODELS must list at least one '<provider>/<model>' entry.")

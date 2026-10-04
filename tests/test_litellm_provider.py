@@ -112,6 +112,20 @@ def test_anthropic_calls_mark_the_system_message_for_caching_but_openai_calls_do
     assert openai_call["api_key"] == "key-o"
 
 
+def test_complete_messages_sends_the_whole_conversation_with_fallback() -> None:
+    messages = [
+        {"role": "system", "content": "S"},
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1"},
+        {"role": "user", "content": "U2"},
+    ]
+    fake = FakeCompletion(_timeout(), _response("A2"))
+
+    assert _provider(fake).complete_messages(messages) == "A2"
+    assert [call["messages"] for call in fake.calls] == [messages, messages]
+    assert fake.calls[0]["cache_control_injection_points"] == [{"location": "message", "role": "system"}]
+
+
 def test_complete_falls_back_when_the_primary_fails() -> None:
     fake = FakeCompletion(_timeout(), _response("respuesta de respaldo"))
 

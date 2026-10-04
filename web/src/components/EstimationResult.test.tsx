@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { EstimationState } from '../hooks/useEstimation'
 import { DONE_META } from '../test/fixtures'
 import { withLocale } from '../test/render'
-import { EstimationResult } from './EstimationResult'
+import { ErrorAlert, EstimationResult } from './EstimationResult'
+import type { EstimationCardState } from './EstimationResult'
 
 const MARKDOWN = `## Estimación: Reservas
 
@@ -15,43 +15,26 @@ const MARKDOWN = `## Estimación: Reservas
 **Total estimado: 232 horas**
 **Duración estimada: 3-4 semanas**`
 
-const state = (overrides: Partial<EstimationState>): EstimationState => ({
-  status: 'idle',
-  text: '',
-  meta: null,
-  error: null,
-  ...overrides,
-})
+const done = (text: string, meta = DONE_META): EstimationCardState => ({ status: 'done', text, meta })
+const loading: EstimationCardState = { status: 'loading' }
 
 describe('EstimationResult', () => {
-  it('renders nothing before the first request', () => {
-    const { container } = withLocale(<EstimationResult state={state({})} />)
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('shows a busy placeholder while waiting for a JSON response', () => {
-    withLocale(<EstimationResult state={state({ status: 'loading' })} />)
+  it('shows a busy placeholder while waiting for the response', () => {
+    withLocale(<EstimationResult state={loading} />)
 
     expect(screen.getByLabelText('Generando estimación')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Estimación' })).toHaveAttribute('aria-busy', 'true')
   })
 
   it('renders English chrome when the locale is English', () => {
-    withLocale(<EstimationResult state={state({ status: 'loading' })} />, 'en')
+    withLocale(<EstimationResult state={loading} />, 'en')
 
     expect(screen.getByLabelText('Generating estimate')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Estimate' })).toBeInTheDocument()
   })
 
-  it('renders partial text while streaming', () => {
-    withLocale(<EstimationResult state={state({ status: 'streaming', text: '## Estimación: Res' })} />)
-
-    expect(screen.getByRole('heading', { name: 'Estimación: Res' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Estimación' })).toHaveAttribute('aria-busy', 'true')
-  })
-
-  it('renders the finished Markdown (tables, separate closing lines) and the generation metadata', () => {
-    withLocale(<EstimationResult state={state({ status: 'done', text: MARKDOWN, meta: DONE_META })} />)
+  it('renders the finished Markdown (tables, separate closing lines) and the prompt version', () => {
+    withLocale(<EstimationResult state={done(MARKDOWN)} />)
 
     expect(screen.getByRole('heading', { name: 'Estimación: Reservas' })).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Diseño')).toBeInTheDocument()
@@ -60,34 +43,38 @@ describe('EstimationResult', () => {
     expect(total.nextElementSibling?.tagName).toBe('BR')
 
     expect(screen.getByText('v1')).toBeInTheDocument()
-    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument()
-    expect(screen.getByText('3184→412 tok · 4.20s')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Estimación' })).toHaveAttribute('aria-busy', 'false')
   })
 
-  it('shows only the prompt version when the JSON endpoint gives no usage data', () => {
-    withLocale(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { prompt_version: 'v1' } })} />)
-
-    expect(screen.getByText('v1')).toBeInTheDocument()
-    expect(screen.queryByText(/tok/)).not.toBeInTheDocument()
-  })
-
-  it('shows a cached chip only for cache hits, in streaming metadata and JSON responses', () => {
+  it('shows a cached chip only for cache hits', () => {
     const { rerender } = withLocale(
-      <EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { ...DONE_META, cache_hit: true } })} />,
+      <EstimationResult state={done('Hecho', { prompt_version: 'v1', cache_hit: true })} />,
       'en',
     )
     expect(screen.getByText('cached')).toBeInTheDocument()
 
-    rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { prompt_version: 'v1', cache_hit: true } })} />)
-    expect(screen.getByText('cached')).toBeInTheDocument()
-
-    rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { ...DONE_META, cache_hit: false } })} />)
+    rerender(<EstimationResult state={done('Hecho')} />)
     expect(screen.queryByText('cached')).not.toBeInTheDocument()
   })
 
+  it('copies the raw Markdown and confirms it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    withLocale(<EstimationResult state={done(MARKDOWN)} />, 'en')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy estimate' }))
+
+    expect(writeText).toHaveBeenCalledWith(MARKDOWN)
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('offers no copy button while the estimate is still loading', () => {
+    withLocale(<EstimationResult state={loading} />, 'en')
+    expect(screen.queryByRole('button', { name: 'Copy estimate' })).not.toBeInTheDocument()
+  })
+
   it('shows errors as an alert', () => {
-    withLocale(<EstimationResult state={state({ status: 'error', error: 'Error HTTP 502: El proveedor LLM falló.' })} />)
+    withLocale(<ErrorAlert message="Error HTTP 502: El proveedor LLM falló." />)
     expect(screen.getByRole('alert')).toHaveTextContent('Error HTTP 502: El proveedor LLM falló.')
   })
 })

@@ -21,6 +21,12 @@ The interactive diagram of this flow, with file/line sources per node, is
 [viewable here](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html)
 (source: `docs/architecture/estimation-flow/`; see §5.5 to regenerate it).
 
+Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
+sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
+count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
+same window as the history), which the UI uses to rebuild the conversation thread when it switches or resumes
+sessions (active id kept in `localStorage`).
+
 Everything in this document exists to keep that flow easy to extend (more providers, more endpoints,
 more context sources) **without rewriting it**.
 
@@ -68,11 +74,14 @@ app/
 ├── dependencies.py      # FastAPI Depends providers (get_estimation_service) — overridable in tests
 ├── exceptions.py        # Domain errors (EstimationError → PromptTemplateError / LLMProviderError)
 ├── logging_config.py    # Structlog dual config (console / JSON) + cost helper
-├── prompts/             # Jinja2 templates + loader (estimation/<version>/)
+├── prompts/             # Jinja2 templates + loader (estimation/<version>/, metadata/<version>/)
 ├── routers/             # HTTP layer: parse, validate, delegate, map errors to status codes
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
+    ├── sessions.py             # Session state: sliding-window history + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
+    ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
@@ -140,9 +149,9 @@ Structure:
 
 ```
 app/services/llm/
-├── base.py       # LLMProvider / StreamingLLMProvider Protocols (the abstraction)
+├── base.py       # LLMProvider / StreamingLLMProvider / ChatLLMProvider Protocols (the abstraction)
 ├── litellm.py    # LiteLLMProvider (ordered model list with fallback; the only SDK user)
-└── factory.py    # get_llm_provider(settings) -> StreamingLLMProvider
+└── factory.py    # get_llm_provider(settings) -> EstimationLLMProvider
 ```
 
 ```python
@@ -170,7 +179,8 @@ A provider that silently truncates or returns a dict breaks every caller.
 `complete(system_prompt, user_prompt) -> str` is deliberately minimal. Do not widen the Protocol with
 streaming, embeddings or tool-calling until a real caller needs them — and when one does, add a
 *separate* Protocol (`StreamingLLMProvider`) rather than forcing every provider to implement dead
-methods.
+methods. Session turns replay a conversation, so they got their own: `ChatLLMProvider`
+(`complete_messages(messages)`); `EstimationLLMProvider` combines the three for the service.
 
 ### 4.5 DIP — depend on abstractions, inject them
 
@@ -273,8 +283,11 @@ Only if a backend LiteLLM cannot reach is ever needed: add a class implementing
   labels of `language.j2`: change them together (a test keeps them in sync).
 - `system.j2` = a **static prefix** (rules + examples, never request data) followed by two short
   trailing blocks: `request.j2` (instructions for the chosen detail level / output format) and
-  `language.j2` (response language). Keeping every variable part at the end is what lets the
-  provider cache the prefix. The description itself only ever goes in `user.j2`.
+  `language.j2` (response language), plus, on session turns only, `project_metadata.j2` (the
+  known project facts). Keeping every variable part at the end is what lets the provider cache
+  the prefix. The description itself only ever goes in `user.j2`.
+- The metadata extractor has its own versioned prompt in `app/prompts/metadata/<version>/`
+  (`METADATA_PROMPT_VERSION`), used by `services/metadata_extractor.py`.
 - Each example declares its parameters (type · detail · format); keep at least one example per
   `output_format` so the few-shots never contradict the requested format.
 - Keep examples **consistent with the mandatory output format** in the prompt; if they diverge, fix
@@ -299,9 +312,11 @@ source) and the rendered `<name>.html` are versioned; archify's `*.finalize*.jso
   prompt pipeline, error mapping), ask the agent to update `candidate.json` from the code and re-run
   archify's `finalize` with `--repo-root .`, then commit both files with the change.
 - Every node cites its source files and lines; keep them pointing at real code, never at plans.
-- `estimation-flow` is the **overview**: keep it to the main request path (~10 nodes). Plumbing
-  (settings, DI, Protocols, error handlers) stays out. When a feature grows its own internals, give
-  it a separate diagram in `docs/architecture/<feature>/` and keep a single box for it in the overview.
+- `estimation-flow` is the **overview**: it shows the main request paths (stateless `/estimate` and
+  session turns). The goal is that it stays easy to understand, not a node count: add nodes when a
+  path needs them. Plumbing (settings, DI, Protocols, error handlers) stays out. Split a feature into
+  its own diagram in `docs/architecture/<feature>/` only when its internals would make the overview
+  hard to read, and keep a single box for it in the overview.
 
 ---
 
@@ -334,7 +349,8 @@ prompt, kept only for comparison/rollback. Do not mix languages within a single 
   (`PromptTemplateError`, `LLMProviderError`, both subclasses of `EstimationError`). Never
   `HTTPException`.
 - Current mapping: invalid input is rejected by the Pydantic schema → **422** (FastAPI default);
-  `InputRejectedError` (prompt injection, moderation) → **400**;
+  `InputRejectedError` (prompt injection, moderation) and `AttachmentError` → **400**;
+  `SessionNotFoundError` → **404**;
   `PromptTemplateError` → **500**; upstream LLM failure (`LLMProviderError`) → **502**. On
   `/estimate/stream` the response has already started, so failures arrive as an SSE `error` event.
 - Prefer a single `@app.exception_handler` per domain exception in `main.py` over repeating
@@ -369,7 +385,7 @@ pnpm test                # both suites from the repo root (API first, then UI)
 pnpm test:api            # uv run pytest  (tests/)
 pnpm test:web            # vitest run     (web/src/**/*.test.ts[x])
 pnpm test:watch          # vitest in watch mode (UI)
-pnpm test:coverage       # pytest --cov=app + vitest --coverage
+pnpm test:coverage       # pytest --cov=app + vitest --coverage (HTML report: web/coverage/index.html)
 ```
 
 - API: `pytest` + `TestClient`. `tests/conftest.py` pins fake settings and **fails any test that
@@ -380,6 +396,8 @@ pnpm test:coverage       # pytest --cov=app + vitest --coverage
 CI (`.github/workflows/ci.yml`) runs both suites on every PR to `main`. `main` is protected: changes land
 only through a PR whose `api-tests` and `web-tests` checks pass (admins included). Those job names are
 required status checks — renaming them blocks every merge until branch protection is updated.
+CI also uploads both lcov reports to [Coveralls](https://coveralls.io/github/bradguillen15/estimator-cag)
+(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). It is informational, never a required check.
 CodeRabbit reviews PRs using `.coderabbit.yaml`, which points reviewers at the rules in this file.
 While the repo has fewer than 10 stars CodeRabbit does **not** auto-review: request it on each PR
 with `@coderabbitai review` (or `@coderabbitai full review`, or tick **Trigger review** in its status

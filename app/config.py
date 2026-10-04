@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     semantic_cache_ttl: int = 86400
     embedding_model: str = "openai/text-embedding-3-small"
     embedding_dims: int = 1536
+    # Conversation sessions (process memory): turns of history replayed to the LLM per session.
+    session_max_turns: int = Field(default=6, ge=1)
     app_env: str
     log_level: str
 

@@ -1,5 +1,7 @@
 # estimator-cag
 
+[![Coverage Status](https://coveralls.io/repos/github/bradguillen15/estimator-cag/badge.svg?branch=main)](https://coveralls.io/github/bradguillen15/estimator-cag?branch=main)
+
 Software project effort estimator using **CAG** (Cache-Augmented Generation): curated example
 estimates are injected into the system prompt, and an LLM turns a project description into a
 Markdown estimate (assumptions, task breakdown, total hours, team and duration).
@@ -9,7 +11,7 @@ Markdown estimate (assumptions, task breakdown, total hours, team and duration).
 | ![Estimator in dark mode answering in Spanish](docs/screenshots/estimator-dark-es.png) | ![Estimator in light mode answering in English](docs/screenshots/estimator-light-en.png) |
 
 - **API:** FastAPI + LiteLLM (`app/`), JSON and SSE streaming endpoints.
-- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`), light/dark and Español/English toggles.
+- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`): one conversation per session shown as a thread (your message + its estimate per turn, then a follow-up composer), with attachments and a project-memory panel; light/dark and Español/English toggles.
 - **Prompts:** versioned Jinja2 templates (`app/prompts/estimation/v3/`).
 
 **How it works:** [open the interactive estimation flow diagram](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html).
@@ -73,6 +75,10 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`) |
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
+| `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
+| `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
+| `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `turns`: what was typed + attachment names + estimate per turn, oldest first, capped by the history window); **404** if unknown |
+| `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/estimate \
@@ -95,6 +101,56 @@ curl -X POST http://127.0.0.1:8000/api/v1/estimate \
 Errors: invalid input **422**, guardrail rejection **400**, prompt misconfiguration **500**,
 LLM provider failure **502**. In the stream, failures arrive as an `error` event.
 
+### Sessions and attachments
+
+A session (`POST /api/v1/sessions`) is a conversation about one project. Estimates inside it take
+the same typed fields as form fields, the text as `transcript`, and optional PDF or Word files:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/sessions/$SESSION_ID/estimate \
+  -F transcript='E-commerce web MVP with a catalog, cart and Stripe payments' \
+  -F project_type=web_saas -F detail_level=medium -F output_format=phases_table \
+  -F attachments=@spec.pdf -F attachments=@scope.docx
+```
+
+**Attachments use local text extraction** (`pypdf` for PDF, `python-docx` for `.docx`): each
+file's text is appended to the transcript under `--- attachment: <name> ---`. We chose it over
+sending the files to a multimodal Files API because:
+
+- **It keeps the fallback chain working.** A file uploaded to one vendor's Files API does not
+  exist for the next model in `LLM_MODELS`; plain text works with any of them.
+- **The guardrails see the attachments.** An instruction hidden in a PDF (indirect prompt
+  injection) is rejected, and PII in it is redacted, exactly as in the transcript.
+- **Caches and RAG keep working on text**, which is also the input for chunking later on.
+
+The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are rejected with a
+**400**. Limits: 5 files, 5 MB each, 60,000 extracted characters in total; `.doc`, encrypted PDFs
+and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
+process memory: a restart forgets them.
+
+**History** is a sliding window of the last `SESSION_MAX_TURNS` turns (default 6; a turn is a
+user message plus the answer). Each call sends the system prompt, rebuilt with the current
+project metadata, then the kept turns, then the new message; older turns are dropped as whole
+pairs. The history keeps the transcript and only a reference to the attachments
+(`[attachments: spec.pdf]`), not their text: replaying up to 60,000 characters on every later
+call would multiply the cost, and the facts taken from them already live in the metadata.
+
+**Project metadata** carries the project facts across turns: name, assumed team size, mentioned
+technologies and agreed scope. It is injected at the end of the system prompt as a
+`<project_metadata>` block (empty on the first turn), after the static prefix, so prompt caching
+still applies. After each answer **a second LLM call extracts the facts as JSON** and merges them:
+new values replace old ones, technologies accumulate. We chose an LLM extractor over regex
+because the agreed scope is semantic, a summary of what the conversation added and removed, which
+no pattern can produce; the name or the technologies alone would have fit a heuristic. The cost
+is one extra call per turn. Safeguards:
+
+- A failed extraction (provider error, invalid JSON) keeps the previous facts and never fails the
+  turn.
+- The facts come from user text and land in the system prompt, so every value is checked with the
+  prompt-injection heuristics and length-capped before it is stored.
+- Session turns skip the response caches: the cache key does not cover the metadata, so a hit
+  could replay an answer built on other facts.
+
 ## Tests
 
 ```bash
@@ -105,6 +161,9 @@ pnpm lint            # ESLint
 ```
 
 Tests never call a real LLM or Redis. The pre-commit hook runs the same checks as CI.
+`tests/integration/` drives whole session flows over HTTP with `httpx.AsyncClient`; its fake
+LLM answers from the prompt it receives, so they prove that context reaches the model and flows
+across turns, not how well a real model uses it.
 
 ## Project structure
 

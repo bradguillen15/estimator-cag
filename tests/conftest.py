@@ -23,11 +23,12 @@ import litellm  # noqa: E402
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.dependencies import get_estimation_service  # noqa: E402
+from app.dependencies import get_estimation_service, get_session_store  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services.cache.base import CachedAnswer  # noqa: E402
 from app.services.estimation_service import EstimationService  # noqa: E402
 from app.services.llm.base import GenerationMetrics  # noqa: E402
+from app.services.sessions import SessionStore  # noqa: E402
 
 VALID_REQUEST: dict[str, str] = {
     "description": "Portal interno para reservar salas con calendario y avisos por email.",
@@ -67,12 +68,18 @@ class FakeProvider:
         self.error = error
         self.fail_after = fail_after
         self.calls: list[tuple[str, str]] = []
+        self.message_calls: list[list[dict[str, str]]] = []
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         self.calls.append((system_prompt, user_prompt))
         if self.error:
             raise self.error
         return self.text
+
+    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+        """Also recorded in ``calls`` as ``(system, last user message)``."""
+        self.message_calls.append(messages)
+        return self.complete(messages[0]["content"], messages[-1]["content"])
 
     def stream(
         self,
@@ -122,10 +129,16 @@ def fake_provider() -> FakeProvider:
 
 
 @pytest.fixture
-def client(fake_provider: FakeProvider, fake_cache: FakeCache) -> Iterator[TestClient]:
-    """API client whose estimation service talks to ``fake_provider`` and caches in ``fake_cache``."""
+def session_store() -> SessionStore:
+    return SessionStore()
+
+
+@pytest.fixture
+def client(fake_provider: FakeProvider, fake_cache: FakeCache, session_store: SessionStore) -> Iterator[TestClient]:
+    """API client wired to ``fake_provider``, ``fake_cache`` and a fresh ``session_store`` per test."""
     service = EstimationService(fake_provider, cache=fake_cache)
     app.dependency_overrides[get_estimation_service] = lambda: service
+    app.dependency_overrides[get_session_store] = lambda: session_store
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
     app.dependency_overrides.clear()

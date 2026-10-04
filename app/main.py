@@ -7,9 +7,16 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from app.exceptions import InputRejectedError, LLMProviderError, PromptTemplateError, UnknownPromptVersionError
+from app.exceptions import (
+    AttachmentError,
+    InputRejectedError,
+    LLMProviderError,
+    PromptTemplateError,
+    SessionNotFoundError,
+    UnknownPromptVersionError,
+)
 from app.logging_config import configure_logging
-from app.routers import estimations
+from app.routers import estimations, sessions
 
 configure_logging()
 
@@ -44,6 +51,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestContextMiddleware)
 app.include_router(estimations.router, prefix="/api/v1")
+app.include_router(sessions.router, prefix="/api/v1")
 
 
 # Domain error → HTTP status. Messages are client-safe; provider details stay in the logs.
@@ -60,6 +68,16 @@ async def _unknown_prompt_version_error(_: Request, exc: UnknownPromptVersionErr
 @app.exception_handler(InputRejectedError)
 async def _input_rejected_error(_: Request, exc: InputRejectedError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(AttachmentError)
+async def _attachment_error(_: Request, exc: AttachmentError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(SessionNotFoundError)
+async def _session_not_found_error(_: Request, exc: SessionNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 @app.exception_handler(LLMProviderError)

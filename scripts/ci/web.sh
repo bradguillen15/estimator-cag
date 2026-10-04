@@ -5,5 +5,10 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 pnpm lint
-pnpm test:web
+# CI sets CI_COVERAGE=1 to also write web/coverage/lcov.info for Coveralls; the pre-commit hook skips it.
+if [[ -n "${CI_COVERAGE:-}" ]]; then
+  pnpm --filter estimator-web test:coverage
+else
+  pnpm test:web
+fi
 pnpm build   # tsc -b type-checks the app and the tests before bundling
