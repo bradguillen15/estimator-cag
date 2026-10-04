@@ -1,5 +1,7 @@
 # estimator-cag
 
+[![Coverage Status](https://coveralls.io/repos/github/bradguillen15/estimator-cag/badge.svg?branch=main)](https://coveralls.io/github/bradguillen15/estimator-cag?branch=main)
+
 Software project effort estimator using **CAG** (Cache-Augmented Generation): curated example
 estimates are injected into the system prompt, and an LLM turns a project description into a
 Markdown estimate (assumptions, task breakdown, total hours, team and duration).

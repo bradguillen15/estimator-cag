@@ -41,6 +41,8 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: 'v8',
+      // text-summary for the terminal, html to browse (web/coverage/index.html), lcov for Coveralls.
+      reporter: ['text-summary', 'html', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/main.tsx', 'src/**/*.d.ts', 'src/test/**', 'src/**/*.test.{ts,tsx}'],
     },

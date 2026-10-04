@@ -31,6 +31,17 @@ jobs:
       # Same script as the pre-commit hook. Python comes from .python-version; tests/conftest.py
       # pins fake settings and blocks real LLM calls, so no secrets are needed.
       - run: bash scripts/ci/api.sh
+        env:
+          CI_COVERAGE: "1"
+
+      # Coveralls merges the api and web reports into one build (see the coverage job).
+      - uses: coverallsapp/github-action@v2.3.8
+        with:
+          file: coverage/api.lcov
+          flag-name: api
+          parallel: true
+          # Coverage is informational: a Coveralls outage must never fail a required check.
+          fail-on-error: false
 
   web:
     name: web-tests
@@ -50,3 +61,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Same script as the pre-commit hook: lint, Vitest, build (includes type-check).
       - run: bash scripts/ci/web.sh
+        env:
+          CI_COVERAGE: "1"
+
+      - uses: coverallsapp/github-action@v2.3.8
+        with:
+          file: web/coverage/lcov.info
+          flag-name: web
+          parallel: true
+          # Coverage is informational: a Coveralls outage must never fail a required check.
+          fail-on-error: false
+
+  # Closes the parallel Coveralls build once both suites uploaded. Not a required check.
+  coverage:
+    name: coverage
+    needs: [api, web]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: coverallsapp/github-action@v2.3.8
+        with:
+          parallel-finished: true
+          carryforward: api,web
+          fail-on-error: false
