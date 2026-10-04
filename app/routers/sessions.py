@@ -9,8 +9,7 @@ from app.dependencies import (
     get_session,
     get_session_store,
 )
-from app.schemas.estimations import EstimationResponse
-from app.schemas.sessions import SessionCreatedResponse
+from app.schemas.sessions import SessionCreatedResponse, SessionEstimationResponse
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.sessions import Session, SessionStore
 
@@ -30,12 +29,17 @@ def create_session(store: Store) -> SessionCreatedResponse:
 
 
 # Domain errors (unknown session, bad attachment, LLM failure…) are mapped by the handlers in main.py.
-@router.post("/sessions/{session_id}/estimate", response_model=EstimationResponse)
+@router.post("/sessions/{session_id}/estimate", response_model=SessionEstimationResponse)
 def create_session_estimate(
     turn: SafeSessionTurn,
     session: CurrentSession,
     service: Service,
     prompt_version: PromptVersion,
-) -> EstimationResponse:
+) -> SessionEstimationResponse:
     text = service.generate_for_session(turn, session, prompt_version)
-    return EstimationResponse(text=text, prompt_version=prompt_version)
+    return SessionEstimationResponse(
+        text=text,
+        prompt_version=prompt_version,
+        project_metadata=session.metadata,
+        history_turns=len(session.history),
+    )

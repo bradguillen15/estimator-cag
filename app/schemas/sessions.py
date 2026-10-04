@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.schemas.estimations import EstimationResponse
+
 
 class SessionCreatedResponse(BaseModel):
     session_id: str = Field(description="Send it on every later request of this conversation.")
@@ -18,3 +20,10 @@ class ProjectMetadata(BaseModel):
 
     def is_empty(self) -> bool:
         return self == ProjectMetadata()
+
+
+class SessionEstimationResponse(EstimationResponse):
+    """A session turn: the estimate plus the session memory after this turn."""
+
+    project_metadata: ProjectMetadata
+    history_turns: int = Field(description="Turns kept in the history window after this one.")

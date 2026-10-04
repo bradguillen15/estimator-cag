@@ -76,7 +76,7 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
 | `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
-| `POST` | `/api/v1/sessions/{session_id}/estimate` | `EstimationResponse`; `multipart/form-data` with attachments |
+| `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/estimate \
@@ -159,6 +159,9 @@ pnpm lint            # ESLint
 ```
 
 Tests never call a real LLM or Redis. The pre-commit hook runs the same checks as CI.
+`tests/integration/` drives whole session flows over HTTP with `httpx.AsyncClient`; its fake
+LLM answers from the prompt it receives, so they prove that context reaches the model and flows
+across turns, not how well a real model uses it.
 
 ## Project structure
 
