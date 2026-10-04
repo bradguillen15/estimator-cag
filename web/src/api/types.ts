@@ -56,6 +56,26 @@ export interface SessionCreatedResponse {
   session_id: string
 }
 
+/** One row of GET /sessions: only sessions with at least one turn are listed. */
+export interface SessionSummary {
+  session_id: string
+  project_name: string | null
+  history_turns: number
+  created_at: string
+  updated_at: string
+}
+
+/** GET /sessions/{id}: what the UI needs to resume a session. */
+export interface SessionDetail {
+  session_id: string
+  project_metadata: ProjectMetadata
+  history_turns: number
+  /** Last assistant message of the history window; null when the session has no turns. */
+  last_estimate: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface SessionEstimationResponse extends EstimationResponse {
   project_metadata: ProjectMetadata
   /** Turns currently held in the server's sliding history window. */

@@ -1,5 +1,12 @@
 import { t } from '../i18n/locale'
-import type { EstimationRequest, PromptContext, SessionCreatedResponse, SessionEstimationResponse } from './types'
+import type {
+  EstimationRequest,
+  PromptContext,
+  SessionCreatedResponse,
+  SessionDetail,
+  SessionEstimationResponse,
+  SessionSummary,
+} from './types'
 
 /** Empty = same origin (Vite proxy in dev, FastAPI serving web/dist in prod). */
 const API_BASE: string = import.meta.env.VITE_API_URL ?? ''
@@ -64,6 +71,16 @@ export async function getPromptContext(): Promise<PromptContext> {
 
 export async function createSession(signal?: AbortSignal): Promise<SessionCreatedResponse> {
   const response = await send('/api/v1/sessions', { method: 'POST', signal })
+  return response.json()
+}
+
+export async function listSessions(signal?: AbortSignal): Promise<SessionSummary[]> {
+  const response = await send('/api/v1/sessions', { signal })
+  return response.json()
+}
+
+export async function getSession(sessionId: string, signal?: AbortSignal): Promise<SessionDetail> {
+  const response = await send(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, { signal })
   return response.json()
 }
 

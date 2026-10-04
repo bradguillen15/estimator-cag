@@ -1,5 +1,5 @@
-import { screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { EstimationState } from '../hooks/useSession'
 import { DONE_META } from '../test/fixtures'
@@ -65,6 +65,22 @@ describe('EstimationResult', () => {
 
     rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: DONE_META })} />)
     expect(screen.queryByText('cached')).not.toBeInTheDocument()
+  })
+
+  it('copies the raw Markdown and confirms it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    withLocale(<EstimationResult state={state({ status: 'done', text: MARKDOWN, meta: DONE_META })} />, 'en')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy estimate' }))
+
+    expect(writeText).toHaveBeenCalledWith(MARKDOWN)
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('offers no copy button while the estimate is still loading', () => {
+    withLocale(<EstimationResult state={state({ status: 'loading' })} />, 'en')
+    expect(screen.queryByRole('button', { name: 'Copy estimate' })).not.toBeInTheDocument()
   })
 
   it('shows errors as an alert', () => {

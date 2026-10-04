@@ -1,4 +1,11 @@
-import type { EstimationRequest, GenerationMeta, ProjectMetadata, SessionEstimationResponse } from '../api/types'
+import type {
+  EstimationRequest,
+  GenerationMeta,
+  ProjectMetadata,
+  SessionDetail,
+  SessionEstimationResponse,
+  SessionSummary,
+} from '../api/types'
 
 export const REQUEST: EstimationRequest = {
   description: 'Portal interno para reservar salas con calendario.',
@@ -23,6 +30,25 @@ export const sessionEstimate = (overrides: Partial<SessionEstimationResponse> = 
   cache_hit: false,
   project_metadata: METADATA,
   history_turns: 1,
+  ...overrides,
+})
+
+export const sessionSummary = (overrides: Partial<SessionSummary> = {}): SessionSummary => ({
+  session_id: 'abcdef123456',
+  project_name: 'Portal de reservas',
+  history_turns: 2,
+  created_at: '2026-01-01T10:00:00Z',
+  updated_at: '2026-01-01T11:00:00Z',
+  ...overrides,
+})
+
+export const sessionDetail = (overrides: Partial<SessionDetail> = {}): SessionDetail => ({
+  session_id: 'abcdef123456',
+  project_metadata: METADATA,
+  history_turns: 2,
+  last_estimate: '## Última estimación',
+  created_at: '2026-01-01T10:00:00Z',
+  updated_at: '2026-01-01T11:00:00Z',
   ...overrides,
 })
 

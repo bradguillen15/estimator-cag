@@ -201,3 +201,21 @@
     animation: none;
   }
 }
+
+/* Project-memory row that just changed: accent wash fading out. Color only, no movement. */
+@keyframes memory-flash {
+  from {
+    background-color: var(--accent-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.memory-flash {
+  animation: memory-flash 600ms var(--ease-out-strong) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-flash {
+    animation-duration: 250ms;
+  }
+}

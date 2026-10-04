@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { checkHealth, createSession, createSessionEstimate, getPromptContext } from './api/client'
-import { METADATA, pdf, sessionEstimate } from './test/fixtures'
+import { checkHealth, createSession, createSessionEstimate, getPromptContext, getSession, listSessions } from './api/client'
+import { METADATA, pdf, sessionDetail, sessionEstimate, sessionSummary } from './test/fixtures'
 
 vi.mock('./api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api/client')>()),
@@ -12,6 +12,8 @@ vi.mock('./api/client', async (importOriginal) => ({
   getPromptContext: vi.fn(),
   createSession: vi.fn(),
   createSessionEstimate: vi.fn(),
+  getSession: vi.fn(),
+  listSessions: vi.fn(),
 }))
 
 const DESCRIPTION = 'App móvil para reservar clases en un gimnasio.'
@@ -25,6 +27,9 @@ beforeEach(() => {
   vi.mocked(getPromptContext).mockResolvedValue({ prompt_version: 'v1', examples_markdown: '' })
   createSessionMock.mockReset()
   estimateMock.mockReset()
+  vi.mocked(getSession).mockReset()
+  vi.mocked(listSessions).mockReset()
+  vi.mocked(listSessions).mockResolvedValue([])
   createSessionMock.mockResolvedValueOnce({ session_id: 'abcdef123456' })
 })
 
@@ -60,8 +65,9 @@ describe('App', () => {
     )
     const memory = screen.getByRole('heading', { name: 'Memoria del proyecto' }).parentElement as HTMLElement
     expect(within(memory).getByText(METADATA.project_name as string)).toBeInTheDocument()
-    expect(within(memory).getByText('React, FastAPI')).toBeInTheDocument()
-    expect(screen.getByText('Turnos en el historial: 1')).toBeInTheDocument()
+    expect(within(memory).getByText('React')).toBeInTheDocument()
+    expect(within(memory).getByText('FastAPI')).toBeInTheDocument()
+    expect(screen.getByText('1 turno')).toBeInTheDocument()
   })
 
   it('starts a new conversation: new session, cleared result and form', async () => {
@@ -77,7 +83,7 @@ describe('App', () => {
     expect(createSessionMock).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('heading', { name: 'Estimación: Gimnasio' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/transcripción o descripción del proyecto/i)).toHaveValue('')
-    expect(screen.getByText('Turnos en el historial: 0')).toBeInTheDocument()
+    expect(screen.getByText('0 turnos')).toBeInTheDocument()
   })
 
   it('has no streaming switch', async () => {
@@ -159,5 +165,21 @@ describe('App', () => {
     await user.click(submit)
     expect(await screen.findByRole('heading', { name: 'Estimación: Reintento' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('lists server sessions and restores the clicked one', async () => {
+    vi.mocked(listSessions).mockResolvedValue([
+      sessionSummary({ session_id: 'abcdef123456', project_name: 'Gimnasio', history_turns: 1 }),
+      sessionSummary({ session_id: 'other0000000', project_name: 'Portal de reservas', history_turns: 2 }),
+    ])
+    vi.mocked(getSession).mockResolvedValue(sessionDetail({ session_id: 'other0000000', last_estimate: '## Estimación: Portal' }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /Portal de reservas/ }))
+
+    await screen.findByRole('heading', { name: 'Estimación: Portal' })
+    expect(screen.getByText('other000')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Portal de reservas/ })).toHaveAttribute('aria-current', 'true')
   })
 })

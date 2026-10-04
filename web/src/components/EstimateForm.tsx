@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
+import type { ChangeEvent, DragEvent, FormEvent, KeyboardEvent } from 'react'
 
 import { DESCRIPTION_MAX, DESCRIPTION_MIN, MAX_ATTACHMENTS } from '../api/types'
 import type { DetailLevel, EstimationInput, OutputFormat, ProjectType } from '../api/types'
 import { useLocale, useT } from '../i18n/useLocale'
 import { detailLevelOptions, outputFormatOptions, projectTypeOptions } from '../i18n/messages'
-import { Chevron } from './icons'
+import { Chevron, Paperclip } from './icons'
 
 interface EstimateFormProps {
   busy: boolean
@@ -21,6 +21,8 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
   const [outputFormat, setOutputFormat] = useState<OutputFormat>('phases_table')
   const [files, setFiles] = useState<File[]>([])
   const [capped, setCapped] = useState(false)
+  const [rejected, setRejected] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   const length = description.trim().length
   const valid = length >= DESCRIPTION_MIN && length <= DESCRIPTION_MAX
@@ -38,16 +40,42 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
     )
   }
 
-  const addFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(event.target.files ?? [])
-    event.target.value = '' // allow picking the same file again after removing it
-    const merged = [...files, ...picked]
+  const addFiles = (picked: File[]) => {
+    // Drops bypass the input's `accept`, so filter here for both paths.
+    const supported = picked.filter(isSupported)
+    setRejected(supported.length < picked.length)
+    const merged = [...files, ...supported]
     setCapped(merged.length > MAX_ATTACHMENTS)
     setFiles(merged.slice(0, MAX_ATTACHMENTS))
   }
 
+  const pickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(event.target.files ?? []))
+    event.target.value = '' // allow picking the same file again after removing it
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDragging(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    // Ignore leave events fired when the pointer moves onto a child element.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setDragging(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setDragging(false)
+    addFiles(Array.from(event.dataTransfer.files))
+  }
+
   const removeFile = (index: number) => {
     setCapped(false)
+    setRejected(false)
     setFiles((current) => current.filter((_, position) => position !== index))
   }
 
@@ -82,23 +110,29 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
         onKeyDown={handleKeyDown}
         maxLength={DESCRIPTION_MAX}
         placeholder={t('form.placeholder')}
-        className={`${CONTROL} block min-h-[150px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
+        className={`${CONTROL} block min-h-[120px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
       />
 
       <div className="mt-5">
         <label htmlFor="attachments" className="mb-2 block text-[13px] font-medium">
           {t('form.attachments')}
         </label>
-        <input
-          id="attachments"
-          type="file"
-          multiple
-          accept=".pdf,.docx"
-          onChange={addFiles}
-          className={`${CONTROL} cursor-pointer px-3 py-2 text-[13px] file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-[12.5px] file:font-medium file:text-ink`}
-        />
-        <p className={`mt-1.5 text-xs ${capped ? 'text-danger' : 'text-faint'}`}>
-          {t('form.attachments.hint', { max: MAX_ATTACHMENTS })}
+        <input id="attachments" type="file" multiple accept={ACCEPT} onChange={pickFiles} className="peer sr-only" />
+        <label
+          htmlFor="attachments"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          data-dragging={dragging || undefined}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-[14px] border border-dashed border-line-strong bg-field px-3 py-3.5 text-[13px] text-muted transition-[background-color,border-color,color] duration-150 ease-out-strong peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent hover:border-accent hover:text-ink data-dragging:border-accent data-dragging:bg-accent-soft data-dragging:text-ink"
+        >
+          <Paperclip className="size-4 flex-none" />
+          <span>
+            {t('form.attachments.drop')} <span className="font-medium text-accent">{t('form.attachments.browse')}</span>
+          </span>
+        </label>
+        <p className={`mt-1.5 text-xs ${capped || rejected ? 'text-danger' : 'text-faint'}`}>
+          {rejected ? t('form.attachments.unsupported') : t('form.attachments.hint', { max: MAX_ATTACHMENTS })}
         </p>
         {files.length > 0 && (
           <ul className="mt-2 grid gap-1.5">
@@ -166,6 +200,12 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
       </div>
     </form>
   )
+}
+
+const ACCEPT = '.pdf,.docx'
+
+function isSupported(file: File): boolean {
+  return /\.(pdf|docx)$/i.test(file.name)
 }
 
 const CONTROL =

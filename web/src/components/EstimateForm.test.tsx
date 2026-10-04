@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -160,5 +160,26 @@ describe('EstimateForm', () => {
 
     await user.click(submit)
     expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), files.slice(0, 5))
+  })
+
+  it('adds dropped PDF/Word files and rejects other types with a hint', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    const a = pdf('a.pdf')
+    const image = new File(['x'], 'photo.png', { type: 'image/png' })
+    const zone = screen.getByText(/arrastra archivos aquí/i)
+    const dataTransfer = { files: [a, image], types: ['Files'], dropEffect: 'none' }
+
+    fireEvent.dragOver(zone, { dataTransfer })
+    expect(zone.closest('label')).toHaveAttribute('data-dragging', 'true')
+    fireEvent.drop(zone, { dataTransfer })
+
+    expect(zone.closest('label')).not.toHaveAttribute('data-dragging')
+    expect(screen.getByText('a.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('photo.png')).not.toBeInTheDocument()
+    expect(screen.getByText(/solo se aceptan archivos pdf o word/i)).toBeInTheDocument()
+
+    await user.type(description, DESCRIPTION)
+    await user.click(submit)
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [a])
   })
 })
