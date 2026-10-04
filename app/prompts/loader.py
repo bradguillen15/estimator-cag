@@ -112,7 +112,7 @@ def render_estimation_prompt(
 
 
 # Version of the project-metadata extraction prompt (app/prompts/metadata/<version>/).
-METADATA_PROMPT_VERSION = "v1"
+METADATA_PROMPT_VERSION = "v2"  # v2: facts written in the response language
 
 
 @lru_cache
@@ -127,11 +127,16 @@ def render_metadata_prompt(
     known: ProjectMetadata,
     description: str,
     estimate: str,
+    language: str = "es",
     version: str = METADATA_PROMPT_VERSION,
 ) -> tuple[str, str]:
-    """Return ``(system, user)`` prompts for the LLM that extracts ``ProjectMetadata`` as JSON."""
+    """Return ``(system, user)`` prompts for the LLM that extracts ``ProjectMetadata`` as JSON.
+
+    ``language`` is the conversation's response language: the free-text facts are written in it,
+    so the project memory reads in the same language as the estimates.
+    """
     environment = _metadata_environment(version)
-    system = environment.get_template("system.j2").render().strip()
+    system = environment.get_template("system.j2").render(language=language).strip()
     user = (
         environment.get_template("user.j2")
         .render(known_facts=known.model_dump_json(), description=description.strip(), estimate=estimate.strip())

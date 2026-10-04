@@ -149,7 +149,9 @@ class EstimationService:
             request.model_copy(update={"description": turn.history_description}), prompt_version
         )
         session.record_turn(history_user, text)
-        session.metadata = self._metadata_extractor.update(session.metadata, request.description, text)
+        session.metadata = self._metadata_extractor.update(
+            session.metadata, request.description, text, request.language.value
+        )
         return text
 
     def generate_stream(

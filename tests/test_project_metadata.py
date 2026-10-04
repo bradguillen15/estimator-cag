@@ -143,6 +143,16 @@ def test_extractor_failures_keep_the_known_facts(answer: str | Exception) -> Non
     assert MetadataExtractor(ScriptedProvider(answer)).update(FULL, "desc", ESTIMATE) == FULL
 
 
+@pytest.mark.parametrize(("language", "expected"), [("es", "Spanish (español)"), ("en", "English")])
+def test_extractor_writes_the_facts_in_the_response_language(language: str, expected: str) -> None:
+    provider = ScriptedProvider('{"project_name": "Reservas"}')
+
+    MetadataExtractor(provider).update(ProjectMetadata(), "Portal de reservas", ESTIMATE, language)
+
+    system, _ = provider.calls[0]
+    assert f"`agreed_scope` in {expected}" in system
+
+
 # --- session turns ----------------------------------------------------------------------------
 
 
@@ -177,3 +187,18 @@ def test_metadata_flows_into_the_next_turn(client: TestClient, session_store: Se
         project_name="Reservas", assumed_team_size=2, mentioned_technologies=["React"]
     )
     assert cache.sets == []  # session turns never touch the response cache
+
+
+def test_session_turn_extracts_the_facts_in_the_requested_language(
+    client: TestClient, session_store: SessionStore
+) -> None:
+    # Regression: the extractor got no language, so the memory stayed in English for Spanish chats.
+    provider = ScriptedProvider(ESTIMATE, json.dumps({"project_name": "Reservas"}))
+    app.dependency_overrides[get_estimation_service] = lambda: EstimationService(provider, cache=FakeCache())  # type: ignore[arg-type]
+    session = session_store.create()
+
+    response = client.post(f"/api/v1/sessions/{session.session_id}/estimate", data={**FORM, "language": "en"})
+
+    assert response.status_code == 200
+    extraction_system = provider.calls[1][0]
+    assert "`agreed_scope` in English" in extraction_system

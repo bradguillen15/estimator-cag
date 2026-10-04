@@ -38,9 +38,14 @@ class MetadataExtractor:
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
 
-    def update(self, known: ProjectMetadata, description: str, estimate: str) -> ProjectMetadata:
-        """The known facts merged with what this turn adds; ``known`` itself on any failure."""
-        system, user = render_metadata_prompt(known, description, estimate)
+    def update(
+        self, known: ProjectMetadata, description: str, estimate: str, language: str = "es"
+    ) -> ProjectMetadata:
+        """The known facts merged with what this turn adds; ``known`` itself on any failure.
+
+        ``language`` is the response language the facts are written in.
+        """
+        system, user = render_metadata_prompt(known, description, estimate, language)
         try:
             raw = self._provider.complete(system, user)
             extracted = ProjectMetadata.model_validate_json(_FENCE_RE.sub("", raw.strip()))
