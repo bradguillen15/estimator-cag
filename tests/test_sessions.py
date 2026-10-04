@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.config import Settings
 from app.exceptions import SessionNotFoundError
 from app.schemas.sessions import ProjectMetadata
 from app.services.sessions import DEFAULT_MAX_TURNS, ConversationHistory, SessionStore, TurnRecord
@@ -72,6 +73,11 @@ def test_to_messages_list_starts_with_the_given_system_prompt() -> None:
 def test_history_rejects_an_empty_window() -> None:
     with pytest.raises(ValueError):
         ConversationHistory(max_turns=0)
+
+
+def test_settings_reject_an_empty_session_window_at_boot() -> None:
+    with pytest.raises(ValidationError, match="session_max_turns"):
+        Settings(_env_file=None, app_env="t", log_level="INFO", session_max_turns=0)
 
 
 # --- ProjectMetadata --------------------------------------------------------------------------
