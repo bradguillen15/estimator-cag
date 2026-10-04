@@ -76,6 +76,8 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
 | `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
+| `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
+| `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `last_estimate`); **404** if unknown |
 | `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
 
 ```bash

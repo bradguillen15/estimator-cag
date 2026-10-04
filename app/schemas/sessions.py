@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.schemas.estimations import EstimationResponse
@@ -27,3 +29,26 @@ class SessionEstimationResponse(EstimationResponse):
 
     project_metadata: ProjectMetadata
     history_turns: int = Field(description="Turns kept in the history window after this one.")
+
+
+class SessionSummary(BaseModel):
+    """One row of the session list."""
+
+    session_id: str
+    project_name: str | None = None
+    history_turns: int = Field(description="Turns kept in the history window.")
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionDetail(BaseModel):
+    """What the UI needs to resume a session: its memory and the last estimate."""
+
+    session_id: str
+    project_metadata: ProjectMetadata
+    history_turns: int = Field(description="Turns kept in the history window.")
+    last_estimate: str | None = Field(
+        default=None, description="Last assistant message in the history window, if any."
+    )
+    created_at: datetime
+    updated_at: datetime

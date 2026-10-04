@@ -1,6 +1,7 @@
 """Session state (sliding-window history, project metadata, in-process store) and POST /sessions."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -139,3 +140,101 @@ def _store_has(store: SessionStore, session_id: str) -> bool:
     except SessionNotFoundError:
         return False
     return True
+
+
+# --- Session.record_turn / SessionStore.list --------------------------------------------------
+
+
+_EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
+
+
+def test_record_turn_adds_to_history_and_bumps_updated_at() -> None:
+    session = SessionStore().create()
+    # A fixed past timestamp: two datetime.now() calls can tie, which made this flaky.
+    session.updated_at = _EPOCH
+
+    session.record_turn("u1", "a1")
+
+    assert len(session.history) == 1
+    assert session.updated_at > _EPOCH
+
+
+def test_store_list_only_returns_sessions_with_turns_most_recent_first() -> None:
+    store = SessionStore()
+    empty = store.create()
+    older = store.create()
+    newer = store.create()
+    older.record_turn("u", "a")
+    newer.record_turn("u", "a")
+    # Explicit timestamps: consecutive datetime.now() calls can tie and make the order random.
+    older.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
+    newer.updated_at = datetime(2026, 1, 2, tzinfo=UTC)
+
+    assert [s.session_id for s in store.list()] == [newer.session_id, older.session_id]
+    assert empty.session_id not in [s.session_id for s in store.list()]
+
+    older.record_turn("u2", "a2")  # bumps to now, later than both fixed dates
+    assert [s.session_id for s in store.list()] == [older.session_id, newer.session_id]
+
+
+# --- GET /sessions ----------------------------------------------------------------------------
+
+
+def test_list_sessions_returns_summaries_of_sessions_with_turns(
+    client: TestClient, session_store: SessionStore
+) -> None:
+    session_store.create()  # no turns: not listed
+    session = session_store.create()
+    session.metadata.project_name = "Portal"
+    session.record_turn("u1", "a1")
+
+    response = client.get("/api/v1/sessions")
+
+    assert response.status_code == 200
+    [row] = response.json()
+    assert row["session_id"] == session.session_id
+    assert row["project_name"] == "Portal"
+    assert row["history_turns"] == 1
+    assert row["created_at"] and row["updated_at"]
+
+
+def test_list_sessions_is_empty_without_turns(client: TestClient, session_store: SessionStore) -> None:
+    session_store.create()
+
+    assert client.get("/api/v1/sessions").json() == []
+
+
+# --- GET /sessions/{id} -----------------------------------------------------------------------
+
+
+def test_get_session_returns_metadata_and_the_last_estimate(
+    client: TestClient, session_store: SessionStore
+) -> None:
+    session = session_store.create()
+    session.metadata.project_name = "Portal"
+    session.record_turn("u1", "a1")
+    session.record_turn("u2", "a2")
+
+    response = client.get(f"/api/v1/sessions/{session.session_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session_id"] == session.session_id
+    assert body["project_metadata"]["project_name"] == "Portal"
+    assert body["history_turns"] == 2
+    assert body["last_estimate"] == "a2"
+
+
+def test_get_session_without_turns_has_no_last_estimate(
+    client: TestClient, session_store: SessionStore
+) -> None:
+    session = session_store.create()
+
+    body = client.get(f"/api/v1/sessions/{session.session_id}").json()
+
+    assert body["last_estimate"] is None
+    assert body["history_turns"] == 0
+
+
+def test_get_unknown_session_is_404(client: TestClient) -> None:
+    assert client.get("/api/v1/sessions/missing").status_code == 404

@@ -73,6 +73,12 @@ class Session:
     history: ConversationHistory
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def record_turn(self, user_content: str, assistant_content: str) -> None:
+        """Add a turn to the history window and bump ``updated_at``."""
+        self.history.add_turn(user_content, assistant_content)
+        self.updated_at = datetime.now(UTC)
 
 
 class SessionStore:
@@ -101,3 +107,9 @@ class SessionStore:
         if session is None:
             raise SessionNotFoundError("La sesión no existe o ha expirado. Crea una nueva.")
         return session
+
+    def list(self) -> list[Session]:
+        """Sessions with at least one turn, most recently updated first."""
+        with self._lock:
+            sessions = [s for s in self._sessions.values() if len(s.history) > 0]
+        return sorted(sessions, key=lambda s: s.updated_at, reverse=True)

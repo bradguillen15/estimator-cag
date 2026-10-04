@@ -9,7 +9,12 @@ from app.dependencies import (
     get_session,
     get_session_store,
 )
-from app.schemas.sessions import SessionCreatedResponse, SessionEstimationResponse
+from app.schemas.sessions import (
+    SessionCreatedResponse,
+    SessionDetail,
+    SessionEstimationResponse,
+    SessionSummary,
+)
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.sessions import Session, SessionStore
 
@@ -26,6 +31,33 @@ SafeSessionTurn = Annotated[SessionTurn, Depends(get_safe_session_request)]
 @router.post("/sessions", response_model=SessionCreatedResponse, status_code=status.HTTP_201_CREATED)
 def create_session(store: Store) -> SessionCreatedResponse:
     return SessionCreatedResponse(session_id=store.create().session_id)
+
+
+@router.get("/sessions", response_model=list[SessionSummary])
+def list_sessions(store: Store) -> list[SessionSummary]:
+    return [
+        SessionSummary(
+            session_id=s.session_id,
+            project_name=s.metadata.project_name,
+            history_turns=len(s.history),
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in store.list()
+    ]
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetail)
+def get_session_detail(session: CurrentSession) -> SessionDetail:
+    assistant_messages = [m["content"] for m in session.history.messages if m["role"] == "assistant"]
+    return SessionDetail(
+        session_id=session.session_id,
+        project_metadata=session.metadata,
+        history_turns=len(session.history),
+        last_estimate=assistant_messages[-1] if assistant_messages else None,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
 
 
 # Domain errors (unknown session, bad attachment, LLM failure…) are mapped by the handlers in main.py.
