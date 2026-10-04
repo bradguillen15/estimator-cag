@@ -76,3 +76,7 @@ format change the structure, not just the content.
 {% include "request.j2" %}
 
 {% include "language.j2" %}
+{% if project_metadata is defined %}
+
+{% include "project_metadata.j2" %}
+{% endif %}

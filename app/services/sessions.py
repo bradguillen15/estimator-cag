@@ -22,21 +22,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
-
 from app.exceptions import SessionNotFoundError
+from app.schemas.sessions import ProjectMetadata
 
 Role = Literal["user", "assistant"]
 DEFAULT_MAX_TURNS = 10
-
-
-class ProjectMetadata(BaseModel):
-    """Facts about the project in progress. Everything is optional: a new session knows nothing."""
-
-    project_name: str | None = None
-    assumed_team_size: int | None = Field(default=None, ge=1)
-    mentioned_technologies: list[str] = Field(default_factory=list)
-    agreed_scope: str | None = None
 
 
 class ConversationHistory:

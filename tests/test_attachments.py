@@ -170,7 +170,7 @@ def test_estimates_with_attachments_in_the_prompt(
         [Attachment("spec.pdf", _pdf("Login with SSO")), Attachment("scope.docx", _docx("Payments module"))],
     )
     _, user = render_estimation_prompt(EstimationRequest.model_validate({**VALID_REQUEST, "description": expected}))
-    assert fake_provider.calls[-1][1] == user
+    assert fake_provider.calls[0][1] == user  # calls[1] is the metadata extractor
 
 
 def test_estimates_without_attachments(client: TestClient, session_store: SessionStore) -> None:

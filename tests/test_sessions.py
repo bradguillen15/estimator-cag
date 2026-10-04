@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.exceptions import SessionNotFoundError
-from app.services.sessions import ConversationHistory, ProjectMetadata, SessionStore
+from app.schemas.sessions import ProjectMetadata
+from app.services.sessions import ConversationHistory, SessionStore
 
 # --- ConversationHistory ----------------------------------------------------------------------
 

@@ -2,6 +2,10 @@
 
 Pipeline (input guardrails run earlier, in ``prepare``): exact cache -> semantic cache -> LLM ->
 output check -> store. Only answers that completed and passed the output check are cached.
+
+Session turns (``generate_for_session``) skip both caches: their prompt also carries the
+session's project metadata, which the cache key does not cover, so a hit could replay an answer
+built on other facts. After the answer, the metadata is updated for the next turn.
 """
 
 from collections.abc import Iterator, Sequence
@@ -16,6 +20,8 @@ from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, Semant
 from app.services.guardrails.input import InputGuardrails
 from app.services.guardrails.output import check_estimation_output
 from app.services.llm.base import GenerationMetrics, StreamingLLMProvider
+from app.services.metadata_extractor import MetadataExtractor
+from app.services.sessions import Session
 
 __all__ = ["PROMPT_VERSION", "EstimationService"]
 
@@ -30,8 +36,10 @@ class EstimationService:
         cache: ResponseCache | None = None,
         cache_models: Sequence[str] | None = None,
         semantic_cache: SemanticCache | None = None,
+        metadata_extractor: MetadataExtractor | None = None,
     ) -> None:
         self._provider = provider
+        self._metadata_extractor = metadata_extractor or MetadataExtractor(provider)
         self._guardrails = guardrails or InputGuardrails()
         self._cache = cache if cache is not None else NoOpCache()
         self._semantic = semantic_cache if semantic_cache is not None else NoOpSemanticCache()
@@ -83,6 +91,22 @@ class EstimationService:
         text = self._provider.complete(system, user)
         if self._passes_output_check(request, text, prompt_version):
             self._store(key, semantic, CachedAnswer(text=text))
+        return text
+
+    def generate_for_session(
+        self,
+        request: EstimationRequest,
+        session: Session,
+        prompt_version: str = PROMPT_VERSION,
+    ) -> str:
+        """One turn of a session: estimate with the known project facts, then update them.
+
+        No caching (see the module docstring). A failed metadata extraction keeps the old facts.
+        """
+        system, user = render_estimation_prompt(request, prompt_version, project_metadata=session.metadata)
+        text = self._provider.complete(system, user)
+        self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
+        session.metadata = self._metadata_extractor.update(session.metadata, request.description, text)
         return text
 
     def generate_stream(

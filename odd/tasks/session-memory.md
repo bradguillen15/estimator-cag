@@ -31,9 +31,11 @@ requests can carry PDF/Word attachments.
   `services/attachments.py`; `get_safe_session_request` runs extraction + guardrails on the
   combined text; `AttachmentError` → 400, `SessionNotFoundError` → 404; README section. Route:
   inline. (Reordered to follow the course: attachments before memory.)
-- [ ] T4 — Multi-turn memory: history window replayed to the LLM + `project_metadata` in the
-  system prompt, both updated on each call
-- [ ] T5 — (per the next course steps)
+- [x] T4 — `project_metadata` in the system prompt (`v3/project_metadata.j2`, trailing block, empty
+  tags on the first turn; no v4 by user decision) + LLM extractor (`services/metadata_extractor.py`,
+  prompt `prompts/metadata/v1/`) updating it after each turn. Session turns skip the caches.
+  `ProjectMetadata` moved to `schemas/sessions.py` (the loader needs it). Route: inline.
+- [ ] T5 — History window replayed to the LLM (next course step)
 
 ## Checks
 
@@ -42,7 +44,9 @@ requests can carry PDF/Word attachments.
 ## Progress
 
 - T1: done, commit `f72cd4b`. 8 tests in `tests/test_sessions.py`.
-- T3: done. 20 tests in `tests/test_attachments.py`; `uv run pytest` exit 0. Limits
+- T4: done. 11 tests in `tests/test_project_metadata.py`; `uv run pytest` 306 passed.
+  Injection check exposed as `prompt_injection_pattern()` in `guardrails/input.py`.
+- T3: done, commit `cb09560`. 20 tests in `tests/test_attachments.py`; `uv run pytest` exit 0. Limits
   are module constants (5 files, 5 MB each, 60k chars). Single-turn for now: history/metadata in T4.
 - T2: done, commit `a5b3dfa`. 2 route tests; `uv run pytest` exit 0. `SESSION_MAX_TURNS` added to
   `config.py` (the user added it to `.env.example`). The conftest `client` now overrides the store

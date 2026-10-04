@@ -68,13 +68,14 @@ app/
 ├── dependencies.py      # FastAPI Depends providers (get_estimation_service) — overridable in tests
 ├── exceptions.py        # Domain errors (EstimationError → PromptTemplateError / LLMProviderError)
 ├── logging_config.py    # Structlog dual config (console / JSON) + cost helper
-├── prompts/             # Jinja2 templates + loader (estimation/<version>/)
+├── prompts/             # Jinja2 templates + loader (estimation/<version>/, metadata/<version>/)
 ├── routers/             # HTTP layer: parse, validate, delegate, map errors to status codes
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
     ├── sessions.py             # Session state: sliding-window history + ProjectMetadata, in-process store
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
+    ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
@@ -275,8 +276,11 @@ Only if a backend LiteLLM cannot reach is ever needed: add a class implementing
   labels of `language.j2`: change them together (a test keeps them in sync).
 - `system.j2` = a **static prefix** (rules + examples, never request data) followed by two short
   trailing blocks: `request.j2` (instructions for the chosen detail level / output format) and
-  `language.j2` (response language). Keeping every variable part at the end is what lets the
-  provider cache the prefix. The description itself only ever goes in `user.j2`.
+  `language.j2` (response language), plus, on session turns only, `project_metadata.j2` (the
+  known project facts). Keeping every variable part at the end is what lets the provider cache
+  the prefix. The description itself only ever goes in `user.j2`.
+- The metadata extractor has its own versioned prompt in `app/prompts/metadata/<version>/`
+  (`METADATA_PROMPT_VERSION`), used by `services/metadata_extractor.py`.
 - Each example declares its parameters (type · detail · format); keep at least one example per
   `output_format` so the few-shots never contradict the requested format.
 - Keep examples **consistent with the mandatory output format** in the prompt; if they diverge, fix

@@ -124,6 +124,22 @@ The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are 
 and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
 process memory: a restart forgets them.
 
+**Project metadata** carries the project facts across turns: name, assumed team size, mentioned
+technologies and agreed scope. It is injected at the end of the system prompt as a
+`<project_metadata>` block (empty on the first turn), after the static prefix, so prompt caching
+still applies. After each answer **a second LLM call extracts the facts as JSON** and merges them:
+new values replace old ones, technologies accumulate. We chose an LLM extractor over regex
+because the agreed scope is semantic, a summary of what the conversation added and removed, which
+no pattern can produce; the name or the technologies alone would have fit a heuristic. The cost
+is one extra call per turn. Safeguards:
+
+- A failed extraction (provider error, invalid JSON) keeps the previous facts and never fails the
+  turn.
+- The facts come from user text and land in the system prompt, so every value is checked with the
+  prompt-injection heuristics and length-capped before it is stored.
+- Session turns skip the response caches: the cache key does not cover the metadata, so a hit
+  could replay an answer built on other facts.
+
 ## Tests
 
 ```bash
