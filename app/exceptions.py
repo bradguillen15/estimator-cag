@@ -21,6 +21,10 @@ class SessionNotFoundError(EstimationError):
     """The ``session_id`` is unknown: never created, or lost on a service restart."""
 
 
+class AttachmentError(EstimationError):
+    """An attachment cannot be used: unsupported type, too large, unreadable or without text."""
+
+
 class InputRejectedError(EstimationError):
     """An input guardrail refused the description (prompt injection, moderation…).
 

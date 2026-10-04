@@ -73,6 +73,8 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`) |
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
+| `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
+| `POST` | `/api/v1/sessions/{session_id}/estimate` | `EstimationResponse`; `multipart/form-data` with attachments |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/estimate \
@@ -94,6 +96,33 @@ curl -X POST http://127.0.0.1:8000/api/v1/estimate \
 
 Errors: invalid input **422**, guardrail rejection **400**, prompt misconfiguration **500**,
 LLM provider failure **502**. In the stream, failures arrive as an `error` event.
+
+### Sessions and attachments
+
+A session (`POST /api/v1/sessions`) is a conversation about one project. Estimates inside it take
+the same typed fields as form fields, the text as `transcript`, and optional PDF or Word files:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/sessions/$SESSION_ID/estimate \
+  -F transcript='E-commerce web MVP with a catalog, cart and Stripe payments' \
+  -F project_type=web_saas -F detail_level=medium -F output_format=phases_table \
+  -F attachments=@spec.pdf -F attachments=@scope.docx
+```
+
+**Attachments use local text extraction** (`pypdf` for PDF, `python-docx` for `.docx`): each
+file's text is appended to the transcript under `--- attachment: <name> ---`. We chose it over
+sending the files to a multimodal Files API because:
+
+- **It keeps the fallback chain working.** A file uploaded to one vendor's Files API does not
+  exist for the next model in `LLM_MODELS`; plain text works with any of them.
+- **The guardrails see the attachments.** An instruction hidden in a PDF (indirect prompt
+  injection) is rejected, and PII in it is redacted, exactly as in the transcript.
+- **Caches and RAG keep working on text**, which is also the input for chunking later on.
+
+The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are rejected with a
+**400**. Limits: 5 files, 5 MB each, 60,000 extracted characters in total; `.doc`, encrypted PDFs
+and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
+process memory: a restart forgets them.
 
 ## Tests
 

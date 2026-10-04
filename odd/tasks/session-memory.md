@@ -26,9 +26,14 @@ requests can carry PDF/Word attachments.
   `ProjectMetadata`, `Session`, `SessionStore`) + `SessionNotFoundError` + tests. Route: inline
   (2 small files, design agreed in chat).
 - [x] T2 — `POST /sessions` → 201 `{"session_id"}` (`routers/sessions.py`, `schemas/sessions.py`, `get_session_store` with `lru_cache`, `SESSION_MAX_TURNS` setting). Route: inline.
-- [ ] T3 — `project_metadata` in the system prompt
-- [ ] T4 — `POST /sessions/{session_id}/estimate` (multi-turn)
-- [ ] T5 — Attachments (PDF/Word)
+- [x] T3 — `POST /sessions/{session_id}/estimate` (multipart: `transcript` + typed form fields +
+  `attachments`) with path B (local extraction, `pypdf` + `python-docx`) in
+  `services/attachments.py`; `get_safe_session_request` runs extraction + guardrails on the
+  combined text; `AttachmentError` → 400, `SessionNotFoundError` → 404; README section. Route:
+  inline. (Reordered to follow the course: attachments before memory.)
+- [ ] T4 — Multi-turn memory: history window replayed to the LLM + `project_metadata` in the
+  system prompt, both updated on each call
+- [ ] T5 — (per the next course steps)
 
 ## Checks
 
@@ -37,7 +42,9 @@ requests can carry PDF/Word attachments.
 ## Progress
 
 - T1: done, commit `f72cd4b`. 8 tests in `tests/test_sessions.py`.
-- T2: done. 2 route tests; `uv run pytest` exit 0. `SESSION_MAX_TURNS` added to
+- T3: done. 20 tests in `tests/test_attachments.py`; `uv run pytest` exit 0. Limits
+  are module constants (5 files, 5 MB each, 60k chars). Single-turn for now: history/metadata in T4.
+- T2: done, commit `a5b3dfa`. 2 route tests; `uv run pytest` exit 0. `SESSION_MAX_TURNS` added to
   `config.py` (the user added it to `.env.example`). The conftest `client` now overrides the store
   with a fresh `session_store` fixture per test.
 - Commits: only when the user asks.

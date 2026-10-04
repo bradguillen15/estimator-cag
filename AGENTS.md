@@ -73,6 +73,8 @@ app/
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
+    ├── sessions.py             # Session state: sliding-window history + ProjectMetadata, in-process store
+    ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
@@ -334,7 +336,8 @@ prompt, kept only for comparison/rollback. Do not mix languages within a single 
   (`PromptTemplateError`, `LLMProviderError`, both subclasses of `EstimationError`). Never
   `HTTPException`.
 - Current mapping: invalid input is rejected by the Pydantic schema → **422** (FastAPI default);
-  `InputRejectedError` (prompt injection, moderation) → **400**;
+  `InputRejectedError` (prompt injection, moderation) and `AttachmentError` → **400**;
+  `SessionNotFoundError` → **404**;
   `PromptTemplateError` → **500**; upstream LLM failure (`LLMProviderError`) → **502**. On
   `/estimate/stream` the response has already started, so failures arrive as an SSE `error` event.
 - Prefer a single `@app.exception_handler` per domain exception in `main.py` over repeating
