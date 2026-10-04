@@ -23,7 +23,9 @@ The interactive diagram of this flow, with file/line sources per node, is
 
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
-count and last estimate), which the UI uses to switch and resume sessions (active id kept in `localStorage`).
+count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
+same window as the history), which the UI uses to rebuild the conversation thread when it switches or resumes
+sessions (active id kept in `localStorage`).
 
 Everything in this document exists to keep that flow easy to extend (more providers, more endpoints,
 more context sources) **without rewriting it**.
@@ -77,7 +79,7 @@ app/
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
-    ├── sessions.py             # Session state: sliding-window history + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── sessions.py             # Session state: sliding-window history + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)

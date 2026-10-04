@@ -65,13 +65,24 @@ export interface SessionSummary {
   updated_at: string
 }
 
+/** One turn of a session as GET /sessions/{id} returns it: what was typed and the estimate it got. */
+export interface SessionTurnView {
+  /** The transcript as typed, without the text extracted from attachments. */
+  description: string
+  attachment_names: string[]
+  estimate: string
+  prompt_version: string
+  cache_hit: boolean
+  created_at: string
+}
+
 /** GET /sessions/{id}: what the UI needs to resume a session. */
 export interface SessionDetail {
   session_id: string
   project_metadata: ProjectMetadata
   history_turns: number
-  /** Last assistant message of the history window; null when the session has no turns. */
-  last_estimate: string | null
+  /** Oldest first; capped by the server's history window. */
+  turns: SessionTurnView[]
   created_at: string
   updated_at: string
 }

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, createSession, createSessionEstimate, getSession, listSessions } from '../api/client'
 import { EMPTY_PROJECT_METADATA } from '../api/types'
-import { METADATA, REQUEST, sessionDetail, sessionEstimate, sessionSummary } from '../test/fixtures'
+import { METADATA, REQUEST, sessionDetail, sessionEstimate, sessionSummary, sessionTurn } from '../test/fixtures'
 import { useSession } from './useSession'
 
 vi.mock('../api/client', async (importOriginal) => ({
@@ -39,7 +39,9 @@ describe('useSession', () => {
     const { result } = await mounted()
 
     expect(createSessionMock).toHaveBeenCalledTimes(1)
-    expect(result.current.state).toEqual({ status: 'idle', text: '', meta: null, error: null })
+    expect(result.current.turns).toEqual([])
+    expect(result.current.pending).toBeNull()
+    expect(result.current.error).toBeNull()
     expect(result.current.session).toEqual({ id: 's1', metadata: EMPTY_PROJECT_METADATA, turns: 0 })
   })
 
@@ -60,8 +62,7 @@ describe('useSession', () => {
 
     const { result } = renderHook(() => useSession())
 
-    await waitFor(() => expect(result.current.state.status).toBe('error'))
-    expect(result.current.state.error).toBe('Error HTTP 500: boom')
+    await waitFor(() => expect(result.current.error).toBe('Error HTTP 500: boom'))
     expect(result.current.session.id).toBeNull()
   })
 
@@ -72,16 +73,24 @@ describe('useSession', () => {
     const files = [new File(['x'], 'a.pdf')]
 
     act(() => void result.current.run(REQUEST, files))
-    expect(result.current.state.status).toBe('loading')
+    expect(result.current.pending).toEqual({
+      description: REQUEST.description,
+      attachmentNames: ['a.pdf'],
+      status: 'loading',
+      error: null,
+    })
 
     await act(async () => resolve(sessionEstimate({ history_turns: 2 })))
 
-    expect(result.current.state).toEqual({
-      status: 'done',
-      text: '## Estimación',
-      meta: { prompt_version: 'v1', cache_hit: false },
-      error: null,
-    })
+    expect(result.current.pending).toBeNull()
+    expect(result.current.turns).toEqual([
+      {
+        description: REQUEST.description,
+        attachmentNames: ['a.pdf'],
+        text: '## Estimación',
+        meta: { prompt_version: 'v1', cache_hit: false },
+      },
+    ])
     expect(result.current.session).toEqual({ id: 's1', metadata: METADATA, turns: 2 })
     expect(estimateMock).toHaveBeenCalledWith('s1', REQUEST, files, expect.any(AbortSignal))
   })
@@ -91,12 +100,13 @@ describe('useSession', () => {
     createSessionMock.mockRejectedValueOnce(new ApiError('down')).mockResolvedValueOnce({ session_id: 's2' })
     estimateMock.mockResolvedValue(sessionEstimate())
     const { result } = renderHook(() => useSession())
-    await waitFor(() => expect(result.current.state.status).toBe('error'))
+    await waitFor(() => expect(result.current.error).not.toBeNull())
 
     await act(() => result.current.run(REQUEST, []))
 
     expect(estimateMock).toHaveBeenCalledWith('s2', REQUEST, [], expect.any(AbortSignal))
-    expect(result.current.state.status).toBe('done')
+    expect(result.current.turns).toHaveLength(1)
+    expect(result.current.error).toBeNull()
     expect(result.current.session.id).toBe('s2')
   })
 
@@ -112,7 +122,7 @@ describe('useSession', () => {
     expect(createSessionMock).toHaveBeenCalledTimes(2)
     expect(estimateMock).toHaveBeenNthCalledWith(1, 's1', REQUEST, [], expect.any(AbortSignal))
     expect(estimateMock).toHaveBeenNthCalledWith(2, 's2', REQUEST, [], expect.any(AbortSignal))
-    expect(result.current.state.status).toBe('done')
+    expect(result.current.turns).toHaveLength(1)
     expect(result.current.session).toEqual({ id: 's2', metadata: METADATA, turns: 1 })
   })
 
@@ -124,7 +134,7 @@ describe('useSession', () => {
     await act(() => result.current.run(REQUEST, []))
 
     expect(estimateMock).toHaveBeenCalledTimes(2)
-    expect(result.current.state).toMatchObject({ status: 'error', error: 'Error HTTP 404: not found' })
+    expect(result.current.pending).toMatchObject({ status: 'error', error: 'Error HTTP 404: not found' })
   })
 
   it('does not retry other errors', async () => {
@@ -135,7 +145,29 @@ describe('useSession', () => {
 
     expect(createSessionMock).toHaveBeenCalledTimes(1)
     expect(estimateMock).toHaveBeenCalledTimes(1)
-    expect(result.current.state).toMatchObject({ status: 'error', error: 'Error HTTP 502: upstream' })
+    expect(result.current.pending).toMatchObject({ status: 'error', error: 'Error HTTP 502: upstream' })
+  })
+
+  it('appends turns in order and keeps earlier ones when a later send fails', async () => {
+    estimateMock
+      .mockResolvedValueOnce(sessionEstimate({ text: 'first' }))
+      .mockResolvedValueOnce(sessionEstimate({ text: 'second' }))
+      .mockRejectedValueOnce(new ApiError('Error HTTP 502: upstream', 502))
+    const { result } = await mounted()
+
+    let first = false
+    await act(async () => void (first = await result.current.run({ ...REQUEST, description: 'one' }, [])))
+    await act(() => result.current.run({ ...REQUEST, description: 'two' }, []))
+    let third = true
+    await act(async () => void (third = await result.current.run({ ...REQUEST, description: 'three' }, [])))
+
+    expect(first).toBe(true)
+    expect(third).toBe(false)
+    expect(result.current.turns.map((turn) => [turn.description, turn.text])).toEqual([
+      ['one', 'first'],
+      ['two', 'second'],
+    ])
+    expect(result.current.pending).toMatchObject({ description: 'three', status: 'error' })
   })
 
   it('resets state and memory and creates a new session on newConversation', async () => {
@@ -148,7 +180,8 @@ describe('useSession', () => {
     await act(() => result.current.newConversation())
 
     expect(createSessionMock).toHaveBeenCalledTimes(2)
-    expect(result.current.state).toEqual({ status: 'idle', text: '', meta: null, error: null })
+    expect(result.current.turns).toEqual([])
+    expect(result.current.pending).toBeNull()
     expect(result.current.session).toEqual({ id: 's2', metadata: EMPTY_PROJECT_METADATA, turns: 0 })
   })
 
@@ -162,7 +195,8 @@ describe('useSession', () => {
     await act(() => result.current.newConversation())
     await act(async () => resolve(sessionEstimate()))
 
-    expect(result.current.state.status).toBe('idle')
+    expect(result.current.turns).toEqual([])
+    expect(result.current.pending).toBeNull()
     expect(result.current.session).toEqual({ id: 's2', metadata: EMPTY_PROJECT_METADATA, turns: 0 })
   })
 
@@ -187,7 +221,7 @@ describe('useSession', () => {
     await act(() => result.current.run(REQUEST, []))
 
     expect(result.current.sessions).toEqual([])
-    expect(result.current.state.status).toBe('done')
+    expect(result.current.turns).toHaveLength(1)
   })
 
   it('resumes the stored session on mount instead of creating one', async () => {
@@ -199,7 +233,14 @@ describe('useSession', () => {
     await waitFor(() => expect(result.current.session.id).toBe('old'))
     expect(createSessionMock).not.toHaveBeenCalled()
     expect(result.current.session).toEqual({ id: 'old', metadata: METADATA, turns: 3 })
-    expect(result.current.state).toEqual({ status: 'done', text: '## Última estimación', meta: null, error: null })
+    expect(result.current.turns).toEqual([
+      {
+        description: 'Portal interno para reservar salas.',
+        attachmentNames: [],
+        text: '## Última estimación',
+        meta: { prompt_version: 'v3', cache_hit: false },
+      },
+    ])
   })
 
   it('creates a new session when the stored one is gone', async () => {
@@ -210,27 +251,42 @@ describe('useSession', () => {
 
     await waitFor(() => expect(result.current.session.id).toBe('s1'))
     expect(localStorage.getItem('estimator.sessionId')).toBe('s1')
-    expect(result.current.state.status).toBe('idle')
+    expect(result.current.turns).toEqual([])
   })
 
-  it('selectSession loads the detail: memory, turns and last estimate', async () => {
+  it('selectSession loads the detail: memory and the turns, replacing the current thread', async () => {
+    estimateMock.mockResolvedValue(sessionEstimate())
     const { result } = await mounted()
-    getSessionMock.mockResolvedValue(sessionDetail({ session_id: 'other', history_turns: 4 }))
+    await act(() => result.current.run(REQUEST, []))
+    getSessionMock.mockResolvedValue(
+      sessionDetail({
+        session_id: 'other',
+        history_turns: 2,
+        turns: [
+          sessionTurn({ description: 'a', estimate: 'A', attachment_names: ['spec.pdf'] }),
+          sessionTurn({ description: 'b', estimate: 'B', cache_hit: true }),
+        ],
+      }),
+    )
 
     await act(() => result.current.selectSession('other'))
 
-    expect(result.current.session).toEqual({ id: 'other', metadata: METADATA, turns: 4 })
-    expect(result.current.state).toEqual({ status: 'done', text: '## Última estimación', meta: null, error: null })
+    expect(result.current.session).toEqual({ id: 'other', metadata: METADATA, turns: 2 })
+    expect(result.current.turns.map((turn) => [turn.description, turn.text, turn.attachmentNames])).toEqual([
+      ['a', 'A', ['spec.pdf']],
+      ['b', 'B', []],
+    ])
+    expect(result.current.turns[1].meta).toEqual({ prompt_version: 'v3', cache_hit: true })
     expect(localStorage.getItem('estimator.sessionId')).toBe('other')
   })
 
   it('selectSession on a session without estimate goes back to idle', async () => {
     const { result } = await mounted()
-    getSessionMock.mockResolvedValue(sessionDetail({ session_id: 'other', last_estimate: null, history_turns: 0 }))
+    getSessionMock.mockResolvedValue(sessionDetail({ session_id: 'other', turns: [], history_turns: 0 }))
 
     await act(() => result.current.selectSession('other'))
 
-    expect(result.current.state.status).toBe('idle')
+    expect(result.current.turns).toEqual([])
   })
 
   it('selectSession does nothing for the active session', async () => {
@@ -250,6 +306,6 @@ describe('useSession', () => {
 
     expect(listSessionsMock.mock.calls.length).toBe(before + 1)
     expect(result.current.session.id).toBe('s1')
-    expect(result.current.state).toMatchObject({ status: 'error', error: 'Error HTTP 404: not found' })
+    expect(result.current.error).toBe('Error HTTP 404: not found')
   })
 })

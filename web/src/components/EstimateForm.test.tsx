@@ -182,4 +182,26 @@ describe('EstimateForm', () => {
     await user.click(submit)
     expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [a])
   })
+
+  it('reads as a follow-up composer once the session has turns', () => {
+    const onSubmit = vi.fn()
+    withLocale(<EstimateForm busy={false} onSubmit={onSubmit} followUp />, 'en')
+
+    expect(screen.getByPlaceholderText(/Continue the conversation/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+  })
+
+  it('clears the draft and files, but keeps the options, when resetKey changes', async () => {
+    const user = userEvent.setup()
+    const { rerender } = withLocale(<EstimateForm busy={false} onSubmit={vi.fn()} resetKey={0} />)
+    await user.type(screen.getByLabelText(/transcripción o descripción del proyecto/i), DESCRIPTION)
+    await user.upload(screen.getByLabelText(/adjuntos/i), pdf('brief.pdf'))
+    await user.selectOptions(screen.getByLabelText('Nivel de detalle'), 'detailed')
+
+    rerender(<EstimateForm busy={false} onSubmit={vi.fn()} resetKey={1} />)
+
+    expect(screen.getByLabelText(/transcripción o descripción del proyecto/i)).toHaveValue('')
+    expect(screen.queryByText('brief.pdf')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Nivel de detalle')).toHaveValue('detailed')
+  })
 })

@@ -10,9 +10,13 @@ import { Chevron, Paperclip } from './icons'
 interface EstimateFormProps {
   busy: boolean
   onSubmit: (input: EstimationInput, files: File[]) => void
+  /** The session already has turns: the form reads as a follow-up composer. */
+  followUp?: boolean
+  /** Bump to clear the typed text and attachments (the options stay), e.g. after a successful send. */
+  resetKey?: number
 }
 
-export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
+export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }: EstimateFormProps) {
   const t = useT()
   const locale = useLocale()
   const [description, setDescription] = useState('')
@@ -23,6 +27,16 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
   const [capped, setCapped] = useState(false)
   const [rejected, setRejected] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [seenResetKey, setSeenResetKey] = useState(resetKey)
+
+  if (seenResetKey !== resetKey) {
+    // Adjusting state during render: clears the draft without remounting (options are kept).
+    setSeenResetKey(resetKey)
+    setDescription('')
+    setFiles([])
+    setCapped(false)
+    setRejected(false)
+  }
 
   const length = description.trim().length
   const valid = length >= DESCRIPTION_MIN && length <= DESCRIPTION_MAX
@@ -109,7 +123,7 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
         onChange={(event) => setDescription(event.target.value)}
         onKeyDown={handleKeyDown}
         maxLength={DESCRIPTION_MAX}
-        placeholder={t('form.placeholder')}
+        placeholder={t(followUp ? 'form.placeholder.followUp' : 'form.placeholder')}
         className={`${CONTROL} block min-h-[120px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
       />
 
@@ -195,7 +209,7 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
               className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent [animation-duration:600ms]"
             />
           )}
-          {busy ? t('form.submitting') : t('form.submit')}
+          {busy ? t('form.submitting') : t(followUp ? 'form.submit.followUp' : 'form.submit')}
         </button>
       </div>
     </form>

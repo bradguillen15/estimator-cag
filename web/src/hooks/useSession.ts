@@ -4,12 +4,20 @@ import { ApiError, createSession, createSessionEstimate, getSession, listSession
 import { EMPTY_PROJECT_METADATA } from '../api/types'
 import type { EstimationRequest, GenerationMeta, ProjectMetadata, SessionDetail, SessionSummary } from '../api/types'
 
-export type EstimationStatus = 'idle' | 'loading' | 'done' | 'error'
-
-export interface EstimationState {
-  status: EstimationStatus
+/** One finished exchange: what the user sent and the estimate that came back. */
+export interface ThreadTurn {
+  description: string
+  attachmentNames: string[]
   text: string
+  /** Null only for turns rebuilt without generation details. */
   meta: GenerationMeta | null
+}
+
+/** The turn being sent: shown as a user message plus a loading card, or the error that ended it. */
+export interface PendingTurn {
+  description: string
+  attachmentNames: string[]
+  status: 'loading' | 'error'
   error: string | null
 }
 
@@ -20,7 +28,6 @@ export interface SessionInfo {
   turns: number
 }
 
-const IDLE: EstimationState = { status: 'idle', text: '', meta: null, error: null }
 const NO_SESSION: SessionInfo = { id: null, metadata: EMPTY_PROJECT_METADATA, turns: 0 }
 
 const STORAGE_KEY = 'estimator.sessionId'
@@ -44,14 +51,25 @@ function writeStoredSessionId(id: string): void {
 const isAbort = (error: unknown): boolean => error instanceof DOMException && error.name === 'AbortError'
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
+const toThreadTurns = (detail: SessionDetail): ThreadTurn[] =>
+  detail.turns.map((turn) => ({
+    description: turn.description,
+    attachmentNames: turn.attachment_names,
+    text: turn.estimate,
+    meta: { prompt_version: turn.prompt_version, cache_hit: turn.cache_hit },
+  }))
+
 /**
  * Conversation-scoped estimation: owns one server session, resumes the last one from
- * localStorage on mount (or creates a new one) and replays the project memory/history the server
+ * localStorage on mount (or creates a new one) and rebuilds the thread from the turns the server
  * returns. Also lists the server's sessions and switches between them. A new run aborts the
  * previous one.
  */
 export function useSession() {
-  const [state, setState] = useState<EstimationState>(IDLE)
+  const [turns, setTurns] = useState<ThreadTurn[]>([])
+  const [pending, setPending] = useState<PendingTurn | null>(null)
+  // Failures that belong to no turn: creating, resuming or switching sessions.
+  const [error, setError] = useState<string | null>(null)
   const [session, setSession] = useState<SessionInfo>(NO_SESSION)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const abortRef = useRef<AbortController | null>(null)
@@ -83,14 +101,14 @@ export function useSession() {
     return session_id
   }, [])
 
-  /** Makes a server session the active one, showing its memory and last estimate (no meta chips). */
+  /** Makes a server session the active one, showing its memory and the turns the server kept. */
   const adopt = useCallback((detail: SessionDetail) => {
     sessionIdRef.current = detail.session_id
     writeStoredSessionId(detail.session_id)
     setSession({ id: detail.session_id, metadata: detail.project_metadata, turns: detail.history_turns })
-    setState(
-      detail.last_estimate === null ? IDLE : { status: 'done', text: detail.last_estimate, meta: null, error: null },
-    )
+    setTurns(toThreadTurns(detail))
+    setPending(null)
+    setError(null)
   }, [])
 
   /** Best effort: a listing failure must never get in the way of estimating. */
@@ -129,7 +147,7 @@ export function useSession() {
       })
       .catch((error: unknown) => {
         if (isAbort(error) || signal.aborted) return
-        setState({ ...IDLE, status: 'error', error: messageOf(error) })
+        setError(messageOf(error))
       })
     return () => {
       // Invalidates a pending creation (StrictMode double mount keeps only the last one).
@@ -139,14 +157,18 @@ export function useSession() {
   }, [abortInFlight, startSession, invalidate, adopt, refreshSessions])
 
   const run = useCallback(
-    async (request: EstimationRequest, files: File[]) => {
+    /** Resolves true when the turn was added to the thread (the composer can then clear). */
+    async (request: EstimationRequest, files: File[]): Promise<boolean> => {
       const controller = abortInFlight()
       const { signal } = controller
-      setState({ ...IDLE, status: 'loading' })
+      const attachmentNames = files.map((file) => file.name)
+      const sent = { description: request.description, attachmentNames }
+      setError(null)
+      setPending({ ...sent, status: 'loading', error: null })
 
       try {
         let id = sessionIdRef.current ?? (await startSession(signal))
-        if (id === null) return
+        if (id === null) return false
 
         let response
         try {
@@ -155,22 +177,29 @@ export function useSession() {
           // The server forgot the session (e.g. it restarted): start over once, memory is lost.
           if (!(error instanceof ApiError) || error.status !== 404) throw error
           id = await startSession(signal)
-          if (id === null) return
+          if (id === null) return false
+          // A restarted session has no history: the earlier turns belong to the lost one.
+          setTurns([])
           response = await createSessionEstimate(id, request, files, signal)
         }
 
-        if (signal.aborted) return
-        setState({
-          status: 'done',
-          text: response.text,
-          meta: { prompt_version: response.prompt_version, cache_hit: response.cache_hit },
-          error: null,
-        })
+        if (signal.aborted) return false
+        setTurns((current) => [
+          ...current,
+          {
+            ...sent,
+            text: response.text,
+            meta: { prompt_version: response.prompt_version, cache_hit: response.cache_hit },
+          },
+        ])
+        setPending(null)
         setSession({ id, metadata: response.project_metadata, turns: response.history_turns })
         void refreshSessions()
+        return true
       } catch (error) {
-        if (isAbort(error) || signal.aborted) return
-        setState({ ...IDLE, status: 'error', error: messageOf(error) })
+        if (isAbort(error) || signal.aborted) return false
+        setPending({ ...sent, status: 'error', error: messageOf(error) })
+        return false
       }
     },
     [abortInFlight, startSession, refreshSessions],
@@ -178,13 +207,15 @@ export function useSession() {
 
   const newConversation = useCallback(async () => {
     const controller = abortInFlight()
-    setState(IDLE)
+    setTurns([])
+    setPending(null)
+    setError(null)
     try {
       await startSession(controller.signal)
       if (!controller.signal.aborted) void refreshSessions()
     } catch (error) {
       if (isAbort(error) || controller.signal.aborted) return
-      setState({ ...IDLE, status: 'error', error: messageOf(error) })
+      setError(messageOf(error))
     }
   }, [abortInFlight, startSession, refreshSessions])
 
@@ -201,11 +232,12 @@ export function useSession() {
       } catch (error) {
         if (isAbort(error) || signal.aborted) return
         if (error instanceof ApiError && error.status === 404) void refreshSessions()
-        setState({ ...IDLE, status: 'error', error: messageOf(error) })
+        setPending(null) // the run this switch aborted would otherwise stay "loading" forever
+        setError(messageOf(error))
       }
     },
     [abortInFlight, adopt, refreshSessions],
   )
 
-  return { state, session, sessions, run, newConversation, selectSession }
+  return { turns, pending, error, session, sessions, run, newConversation, selectSession }
 }

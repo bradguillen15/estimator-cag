@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 import type { GenerationMeta } from '../api/types'
-import type { EstimationState } from '../hooks/useSession'
 import { useT } from '../i18n/useLocale'
 import { Check, Copy } from './icons'
 import { Markdown } from './Markdown'
@@ -9,44 +8,41 @@ import { Tooltip } from './Tooltip'
 
 const COPIED_FEEDBACK_MS = 1600
 
-export function EstimationResult({ state }: { state: EstimationState }) {
+/** What one estimate card shows: the answer, or the placeholder while it is generated. */
+export type EstimationCardState =
+  | { status: 'loading' }
+  | { status: 'done'; text: string; meta: GenerationMeta | null }
+
+export function ErrorAlert({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mt-5 animate-enter rounded-[14px] bg-danger-soft px-4 py-3.5 text-[13.5px] text-danger shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_25%,transparent)]"
+    >
+      {message}
+    </div>
+  )
+}
+
+/** The estimate of one turn: heading, generation chips, copy button and the Markdown (or a skeleton). */
+export function EstimationResult({ state }: { state: EstimationCardState }) {
   const t = useT()
-
-  if (state.status === 'idle') return null
-
-  if (state.status === 'error') {
-    return (
-      <div
-        role="alert"
-        className="mt-5 animate-enter rounded-[14px] bg-danger-soft px-4 py-3.5 text-[13.5px] text-danger shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_25%,transparent)]"
-      >
-        {state.error}
-      </div>
-    )
-  }
+  const headingId = useId()
+  const done = state.status === 'done'
 
   return (
-    <section
-      className="mt-12 animate-enter"
-      aria-labelledby="estimation-heading"
-      aria-live="polite"
-      aria-busy={state.status !== 'done'}
-    >
-      <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="estimation-heading" className="text-[26px] font-bold tracking-[-0.03em]">
+    <section className="mt-4 animate-enter" aria-labelledby={headingId} aria-live="polite" aria-busy={!done}>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+        <h2 id={headingId} className="text-[22px] font-bold tracking-[-0.03em]">
           {t('result.heading')}
         </h2>
         <div className="flex items-center gap-2">
-          {state.meta && <MetaChips meta={state.meta} />}
-          {state.status === 'done' && state.text && <CopyButton text={state.text} />}
+          {done && state.meta && <MetaChips meta={state.meta} />}
+          {done && state.text && <CopyButton text={state.text} />}
         </div>
       </div>
       <article className="rounded-[22px] bg-surface p-5 shadow-card md:p-7">
-        {state.status === 'loading' ? (
-          <Skeleton label={t('result.generating')} />
-        ) : (
-          <Markdown>{state.text}</Markdown>
-        )}
+        {done ? <Markdown>{state.text}</Markdown> : <Skeleton label={t('result.generating')} />}
       </article>
     </section>
   )

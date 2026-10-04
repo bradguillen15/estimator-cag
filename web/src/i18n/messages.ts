@@ -49,6 +49,7 @@ const es = {
   'form.description.min': 'mínimo {min}',
   'form.placeholder':
     'Ej.: Necesitamos un MVP web de e-commerce con catálogo, carrito, pagos y panel de administración…',
+  'form.placeholder.followUp': 'Sigue la conversación: agrega alcance, cambia el equipo…',
   'form.attachments': 'Adjuntos (PDF o Word)',
   'form.attachments.hint': 'Máximo {max} archivos; se ignoran los extra.',
   'form.attachments.remove': 'Quitar {name}',
@@ -60,6 +61,7 @@ const es = {
   'form.outputFormat': 'Formato de salida',
   'form.shortcut': 'para generar',
   'form.submit': 'Generar estimación',
+  'form.submit.followUp': 'Enviar',
   'form.submitting': 'Generando…',
 
   'projectType.mobile_app': 'App móvil',
@@ -75,6 +77,8 @@ const es = {
   'outputFormat.line_items': 'Partidas / line items',
   'outputFormat.narrative': 'Narrativo',
 
+  'thread.label': 'Conversación',
+  'thread.you': 'Tú',
   'result.heading': 'Estimación',
   'result.generating': 'Generando estimación',
   'result.cached': 'desde caché',
@@ -132,6 +136,7 @@ const en: { [K in keyof typeof es]: string } = {
   'form.description.min': 'minimum {min}',
   'form.placeholder':
     'e.g. We need a web e-commerce MVP with catalog, cart, payments and an admin panel…',
+  'form.placeholder.followUp': 'Continue the conversation: add scope, change the team…',
   'form.attachments': 'Attachments (PDF or Word)',
   'form.attachments.hint': 'Up to {max} files; extras are ignored.',
   'form.attachments.remove': 'Remove {name}',
@@ -143,6 +148,7 @@ const en: { [K in keyof typeof es]: string } = {
   'form.outputFormat': 'Output format',
   'form.shortcut': 'to generate',
   'form.submit': 'Generate estimate',
+  'form.submit.followUp': 'Send',
   'form.submitting': 'Generating…',
 
   'projectType.mobile_app': 'Mobile app',
@@ -158,6 +164,8 @@ const en: { [K in keyof typeof es]: string } = {
   'outputFormat.line_items': 'Line items',
   'outputFormat.narrative': 'Narrative',
 
+  'thread.label': 'Conversation',
+  'thread.you': 'You',
   'result.heading': 'Estimate',
   'result.generating': 'Generating estimate',
   'result.cached': 'cached',

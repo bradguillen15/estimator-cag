@@ -5,6 +5,7 @@ import type {
   SessionDetail,
   SessionEstimationResponse,
   SessionSummary,
+  SessionTurnView,
 } from '../api/types'
 
 export const REQUEST: EstimationRequest = {
@@ -42,11 +43,21 @@ export const sessionSummary = (overrides: Partial<SessionSummary> = {}): Session
   ...overrides,
 })
 
+export const sessionTurn = (overrides: Partial<SessionTurnView> = {}): SessionTurnView => ({
+  description: 'Portal interno para reservar salas.',
+  attachment_names: [],
+  estimate: '## Última estimación',
+  prompt_version: 'v3',
+  cache_hit: false,
+  created_at: '2026-01-01T10:30:00Z',
+  ...overrides,
+})
+
 export const sessionDetail = (overrides: Partial<SessionDetail> = {}): SessionDetail => ({
   session_id: 'abcdef123456',
   project_metadata: METADATA,
   history_turns: 2,
-  last_estimate: '## Última estimación',
+  turns: [sessionTurn()],
   created_at: '2026-01-01T10:00:00Z',
   updated_at: '2026-01-01T11:00:00Z',
   ...overrides,

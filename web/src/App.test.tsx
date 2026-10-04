@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { checkHealth, createSession, createSessionEstimate, getPromptContext, getSession, listSessions } from './api/client'
-import { METADATA, pdf, sessionDetail, sessionEstimate, sessionSummary } from './test/fixtures'
+import { METADATA, pdf, sessionDetail, sessionEstimate, sessionSummary, sessionTurn } from './test/fixtures'
 
 vi.mock('./api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api/client')>()),
@@ -40,6 +40,8 @@ async function fillForm() {
   await user.type(screen.getByLabelText(/transcripción o descripción del proyecto/i), DESCRIPTION)
   return user
 }
+
+const TWO = 'Ahora añade una app móvil para reservar desde el teléfono.'
 
 describe('App', () => {
   it('creates a session on load and shows its short id', async () => {
@@ -101,7 +103,8 @@ describe('App', () => {
     expect(estimateMock).toHaveBeenLastCalledWith('abcdef123456', expect.objectContaining({ language: 'es' }), [], expect.any(AbortSignal))
 
     await user.click(screen.getByRole('radio', { name: /English/ }))
-    await user.click(screen.getByRole('button', { name: 'Generate estimate' }))
+    await user.type(screen.getByLabelText(/transcript or project description/i), DESCRIPTION)
+    await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(estimateMock).toHaveBeenLastCalledWith('abcdef123456', expect.objectContaining({ language: 'en' }), [], expect.any(AbortSignal))
   })
 
@@ -161,6 +164,7 @@ describe('App', () => {
     await user.click(submit)
     expect(await screen.findByRole('alert')).toHaveTextContent('tardó demasiado')
     expect(submit).toBeEnabled()
+    expect(screen.getByLabelText(/transcripción o descripción del proyecto/i)).toHaveValue(DESCRIPTION)
 
     await user.click(submit)
     expect(await screen.findByRole('heading', { name: 'Estimación: Reintento' })).toBeInTheDocument()
@@ -172,7 +176,7 @@ describe('App', () => {
       sessionSummary({ session_id: 'abcdef123456', project_name: 'Gimnasio', history_turns: 1 }),
       sessionSummary({ session_id: 'other0000000', project_name: 'Portal de reservas', history_turns: 2 }),
     ])
-    vi.mocked(getSession).mockResolvedValue(sessionDetail({ session_id: 'other0000000', last_estimate: '## Estimación: Portal' }))
+    vi.mocked(getSession).mockResolvedValue(sessionDetail({ session_id: 'other0000000', turns: [sessionTurn({ estimate: '## Estimación: Portal' })] }))
     const user = userEvent.setup()
     render(<App />)
 
@@ -181,5 +185,79 @@ describe('App', () => {
     await screen.findByRole('heading', { name: 'Estimación: Portal' })
     expect(screen.getByText('other000')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Portal de reservas/ })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('shows the thread: two sends give two turns in order and an empty composer in follow-up mode', async () => {
+    estimateMock
+      .mockResolvedValueOnce(sessionEstimate({ text: '## Estimación: Uno', history_turns: 1 }))
+      .mockResolvedValueOnce(sessionEstimate({ text: '## Estimación: Dos', history_turns: 2 }))
+    const user = await fillForm()
+    const composer = screen.getByLabelText(/transcripción o descripción del proyecto/i)
+    await user.upload(screen.getByLabelText(/adjuntos/i), pdf('brief.pdf'))
+    await user.selectOptions(screen.getByLabelText('Nivel de detalle'), 'detailed')
+
+    await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
+    await screen.findByRole('heading', { name: 'Estimación: Uno' })
+
+    // The hero gives way to the thread; the draft is gone but the options stay.
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    expect(composer).toHaveValue('')
+    expect(screen.queryByText('brief.pdf', { selector: 'li span' })).toBeInTheDocument() // chip in the thread
+    expect(screen.getByLabelText('Nivel de detalle')).toHaveValue('detailed')
+    expect(composer).toHaveAttribute('placeholder', expect.stringMatching(/Sigue la conversación/))
+
+    await user.type(composer, TWO)
+    await user.click(screen.getByRole('button', { name: 'Enviar' }))
+    await screen.findByRole('heading', { name: 'Estimación: Dos' })
+
+    const thread = screen.getByRole('region', { name: 'Conversación' })
+    expect(within(thread).getByText(DESCRIPTION)).toBeInTheDocument()
+    const order = Array.from(thread.querySelectorAll('h2, [class*="whitespace-pre-wrap"]')).map((node) => node.textContent)
+    expect(order).toEqual([DESCRIPTION, 'Estimación', 'Estimación: Uno', TWO, 'Estimación', 'Estimación: Dos'])
+    expect(screen.getByRole('heading', { name: 'Estimación: Uno' })).toBeInTheDocument()
+    expect(composer).toHaveValue('')
+  })
+
+  it('keeps the typed text and earlier turns when a follow-up fails', async () => {
+    estimateMock
+      .mockResolvedValueOnce(sessionEstimate({ text: '## Estimación: Uno' }))
+      .mockRejectedValueOnce(new Error('Error HTTP 502: falló'))
+    const user = await fillForm()
+    await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
+    await screen.findByRole('heading', { name: 'Estimación: Uno' })
+    const composer = screen.getByLabelText(/transcripción o descripción del proyecto/i)
+
+    await user.type(composer, TWO)
+    await user.click(screen.getByRole('button', { name: 'Enviar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('falló')
+    expect(composer).toHaveValue(TWO)
+    expect(screen.getByRole('heading', { name: 'Estimación: Uno' })).toBeInTheDocument()
+  })
+
+  it('renders the turns of the selected session, with attachment names', async () => {
+    vi.mocked(listSessions).mockResolvedValue([
+      sessionSummary({ session_id: 'other0000000', project_name: 'Portal de reservas', history_turns: 2 }),
+    ])
+    vi.mocked(getSession).mockResolvedValue(
+      sessionDetail({
+        session_id: 'other0000000',
+        turns: [
+          sessionTurn({ description: 'Primer mensaje del cliente', estimate: '## Estimación: A', attachment_names: ['spec.pdf'] }),
+          sessionTurn({ description: 'Segundo mensaje del cliente', estimate: '## Estimación: B' }),
+        ],
+      }),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: /Portal de reservas/ }))
+
+    await screen.findByRole('heading', { name: 'Estimación: B' })
+    const thread = screen.getByRole('region', { name: 'Conversación' })
+    expect(within(thread).getByText('Primer mensaje del cliente')).toBeInTheDocument()
+    expect(within(thread).getByText('spec.pdf')).toBeInTheDocument()
+    expect(within(thread).getByText('Segundo mensaje del cliente')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeInTheDocument()
   })
 })

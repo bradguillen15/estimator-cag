@@ -11,7 +11,7 @@ Markdown estimate (assumptions, task breakdown, total hours, team and duration).
 | ![Estimator in dark mode answering in Spanish](docs/screenshots/estimator-dark-es.png) | ![Estimator in light mode answering in English](docs/screenshots/estimator-light-en.png) |
 
 - **API:** FastAPI + LiteLLM (`app/`), JSON and SSE streaming endpoints.
-- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`): one conversation per session with attachments and a project-memory panel; light/dark and Español/English toggles.
+- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`): one conversation per session shown as a thread (your message + its estimate per turn, then a follow-up composer), with attachments and a project-memory panel; light/dark and Español/English toggles.
 - **Prompts:** versioned Jinja2 templates (`app/prompts/estimation/v3/`).
 
 **How it works:** [open the interactive estimation flow diagram](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html).
@@ -77,7 +77,7 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
 | `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
 | `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
-| `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `last_estimate`); **404** if unknown |
+| `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `turns`: what was typed + attachment names + estimate per turn, oldest first, capped by the history window); **404** if unknown |
 | `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
 
 ```bash
