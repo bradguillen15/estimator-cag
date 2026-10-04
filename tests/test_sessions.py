@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.exceptions import SessionNotFoundError
 from app.schemas.sessions import ProjectMetadata
-from app.services.sessions import ConversationHistory, SessionStore
+from app.services.sessions import DEFAULT_MAX_TURNS, ConversationHistory, SessionStore
 
 # --- ConversationHistory ----------------------------------------------------------------------
 
@@ -45,6 +45,27 @@ def test_history_messages_is_a_copy() -> None:
     history.messages.clear()
 
     assert history.messages[0]["content"] == "u1"
+
+
+def test_default_window_is_six_turns() -> None:
+    assert DEFAULT_MAX_TURNS == 6
+    assert ConversationHistory().max_turns == 6
+
+
+def test_to_messages_list_starts_with_the_given_system_prompt() -> None:
+    history = ConversationHistory(max_turns=2)
+    assert history.to_messages_list("S0") == [{"role": "system", "content": "S0"}]
+
+    for n in range(1, 4):
+        history.add_turn(f"u{n}", f"a{n}")
+
+    assert history.to_messages_list("S1") == [
+        {"role": "system", "content": "S1"},
+        {"role": "user", "content": "u2"},
+        {"role": "assistant", "content": "a2"},
+        {"role": "user", "content": "u3"},
+        {"role": "assistant", "content": "a3"},
+    ]
 
 
 def test_history_rejects_an_empty_window() -> None:

@@ -124,6 +124,13 @@ The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are 
 and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
 process memory: a restart forgets them.
 
+**History** is a sliding window of the last `SESSION_MAX_TURNS` turns (default 6; a turn is a
+user message plus the answer). Each call sends the system prompt, rebuilt with the current
+project metadata, then the kept turns, then the new message; older turns are dropped as whole
+pairs. The history keeps the transcript and only a reference to the attachments
+(`[attachments: spec.pdf]`), not their text: replaying up to 60,000 characters on every later
+call would multiply the cost, and the facts taken from them already live in the metadata.
+
 **Project metadata** carries the project facts across turns: name, assumed team size, mentioned
 technologies and agreed scope. It is injected at the end of the system prompt as a
 `<project_metadata>` block (empty on the first turn), after the static prefix, so prompt caching

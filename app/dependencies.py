@@ -10,10 +10,10 @@ from app.config import settings
 from app.exceptions import UnknownPromptVersionError
 from app.prompts.loader import PROMPT_VERSION, available_prompt_versions
 from app.schemas.estimations import DetailLevel, EstimationRequest, OutputFormat, ProjectType
-from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, build_description
+from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment
 from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
-from app.services.estimation_service import EstimationService
+from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.guardrails.input import InputGuardrails
 from app.services.llm.base import ModerationProvider
 from app.services.llm.factory import get_embedder, get_llm_provider, get_moderator
@@ -109,7 +109,7 @@ def get_safe_session_request(
     _prompt_version: Annotated[str, Depends(get_prompt_version)],
     language: Annotated[str | None, Form()] = None,
     attachments: Annotated[list[UploadFile] | None, File(description="PDF or Word (.docx) files.")] = None,
-) -> EstimationRequest:
+) -> SessionTurn:
     """The multipart request (transcript + attachments) after extraction and the input guardrails.
 
     Same contract as ``get_safe_request``: an unknown session (404), an unusable attachment or a
@@ -130,6 +130,4 @@ def get_safe_session_request(
         Attachment(filename=upload.filename or "adjunto", content=upload.file.read(MAX_ATTACHMENT_BYTES + 1))
         for upload in attachments or []
     ]
-    description = build_description(request.description, files)
-    # The transcript alone was validated above; the attachments have their own limits.
-    return service.prepare(request.model_copy(update={"description": description}))
+    return service.prepare_session_turn(request, files)

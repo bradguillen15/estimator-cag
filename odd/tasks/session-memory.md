@@ -35,7 +35,10 @@ requests can carry PDF/Word attachments.
   tags on the first turn; no v4 by user decision) + LLM extractor (`services/metadata_extractor.py`,
   prompt `prompts/metadata/v1/`) updating it after each turn. Session turns skip the caches.
   `ProjectMetadata` moved to `schemas/sessions.py` (the loader needs it). Route: inline.
-- [ ] T5 — History window replayed to the LLM (next course step)
+- [x] T5 — History window replayed to the LLM: default 6 turns, `to_messages_list(system)`,
+  `ChatLLMProvider.complete_messages` (LiteLLM `complete()` delegates to it),
+  `EstimationService.prepare_session_turn` → `SessionTurn` (history keeps transcript +
+  `[attachments: ...]` reference, PII-redacted). Route: inline.
 
 ## Checks
 
@@ -44,7 +47,9 @@ requests can carry PDF/Word attachments.
 ## Progress
 
 - T1: done, commit `f72cd4b`. 8 tests in `tests/test_sessions.py`.
-- T4: done. 11 tests in `tests/test_project_metadata.py`; `uv run pytest` 306 passed.
+- T5: done. 8 new tests (`test_session_history.py`, history + provider); 314 passed.
+  The user should set `SESSION_MAX_TURNS=6` in `.env.example` if it still says 10.
+- T4: done, commit `7ff3a2d`. 11 tests in `tests/test_project_metadata.py`; `uv run pytest` 306 passed.
   Injection check exposed as `prompt_injection_pattern()` in `guardrails/input.py`.
 - T3: done, commit `cb09560`. 20 tests in `tests/test_attachments.py`; `uv run pytest` exit 0. Limits
   are module constants (5 files, 5 MB each, 60k chars). Single-turn for now: history/metadata in T4.

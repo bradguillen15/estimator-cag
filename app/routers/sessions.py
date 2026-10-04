@@ -9,9 +9,9 @@ from app.dependencies import (
     get_session,
     get_session_store,
 )
-from app.schemas.estimations import EstimationRequest, EstimationResponse
+from app.schemas.estimations import EstimationResponse
 from app.schemas.sessions import SessionCreatedResponse
-from app.services.estimation_service import EstimationService
+from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.sessions import Session, SessionStore
 
 router = APIRouter(tags=["sessions"])
@@ -21,7 +21,7 @@ Service = Annotated[EstimationService, Depends(get_estimation_service)]
 PromptVersion = Annotated[str, Depends(get_prompt_version)]
 CurrentSession = Annotated[Session, Depends(get_session)]
 # Multipart transcript + attachments, after the session lookup, extraction and input guardrails.
-SafeSessionRequest = Annotated[EstimationRequest, Depends(get_safe_session_request)]
+SafeSessionTurn = Annotated[SessionTurn, Depends(get_safe_session_request)]
 
 
 @router.post("/sessions", response_model=SessionCreatedResponse, status_code=status.HTTP_201_CREATED)
@@ -32,10 +32,10 @@ def create_session(store: Store) -> SessionCreatedResponse:
 # Domain errors (unknown session, bad attachment, LLM failure…) are mapped by the handlers in main.py.
 @router.post("/sessions/{session_id}/estimate", response_model=EstimationResponse)
 def create_session_estimate(
-    body: SafeSessionRequest,
+    turn: SafeSessionTurn,
     session: CurrentSession,
     service: Service,
     prompt_version: PromptVersion,
 ) -> EstimationResponse:
-    text = service.generate_for_session(body, session, prompt_version)
+    text = service.generate_for_session(turn, session, prompt_version)
     return EstimationResponse(text=text, prompt_version=prompt_version)

@@ -26,7 +26,7 @@ from app.exceptions import SessionNotFoundError
 from app.schemas.sessions import ProjectMetadata
 
 Role = Literal["user", "assistant"]
-DEFAULT_MAX_TURNS = 10
+DEFAULT_MAX_TURNS = 6  # SESSION_MAX_TURNS overrides it
 
 
 class ConversationHistory:
@@ -47,6 +47,15 @@ class ConversationHistory:
         overflow = len(self._messages) - 2 * self.max_turns
         if overflow > 0:
             del self._messages[:overflow]
+
+    def to_messages_list(self, system_prompt: str) -> list[dict[str, str]]:
+        """The ``messages`` array for the LLM: the system prompt, then the kept turns.
+
+        The system prompt is passed in on every call rather than stored, so it is always present
+        (never trimmed) and always rebuilt from the current ``project_metadata``. The caller
+        appends the new user message.
+        """
+        return [{"role": "system", "content": system_prompt}, *self.messages]
 
     @property
     def messages(self) -> list[dict[str, str]]:

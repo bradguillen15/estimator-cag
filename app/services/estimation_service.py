@@ -3,12 +3,14 @@
 Pipeline (input guardrails run earlier, in ``prepare``): exact cache -> semantic cache -> LLM ->
 output check -> store. Only answers that completed and passed the output check are cached.
 
-Session turns (``generate_for_session``) skip both caches: their prompt also carries the
-session's project metadata, which the cache key does not cover, so a hit could replay an answer
-built on other facts. After the answer, the metadata is updated for the next turn.
+Session turns (``prepare_session_turn`` + ``generate_for_session``) skip both caches: their
+prompt also carries the session's history and project metadata, which the cache key does not
+cover, so a hit could replay an answer built on another conversation. After the answer, the turn
+is added to the history window and the metadata is updated for the next turn.
 """
 
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from time import perf_counter
 
 import structlog
@@ -17,21 +19,36 @@ from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, rende
 from app.schemas.estimations import EstimationRequest
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
-from app.services.guardrails.input import InputGuardrails
+from app.services.attachments import Attachment, build_description, display_name
+from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
-from app.services.llm.base import GenerationMetrics, StreamingLLMProvider
+from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
 from app.services.metadata_extractor import MetadataExtractor
 from app.services.sessions import Session
 
-__all__ = ["PROMPT_VERSION", "EstimationService"]
+__all__ = ["PROMPT_VERSION", "EstimationService", "SessionTurn"]
 
 logger = structlog.get_logger()
+
+
+@dataclass(frozen=True)
+class SessionTurn:
+    """A prepared session request.
+
+    ``request.description`` is what the LLM sees this turn (transcript + attachment text, after the
+    guardrails). ``history_description`` is what the history keeps: the transcript plus a reference
+    to the attachments, not their text, so the replayed window stays cheap. Facts taken from the
+    attachments survive through ``project_metadata``.
+    """
+
+    request: EstimationRequest
+    history_description: str
 
 
 class EstimationService:
     def __init__(
         self,
-        provider: StreamingLLMProvider,
+        provider: EstimationLLMProvider,
         guardrails: InputGuardrails | None = None,
         cache: ResponseCache | None = None,
         cache_models: Sequence[str] | None = None,
@@ -67,6 +84,24 @@ class EstimationService:
         safe_description = self._guardrails.check(request.description)
         return request.model_copy(update={"description": safe_description})
 
+    def prepare_session_turn(self, request: EstimationRequest, attachments: Sequence[Attachment]) -> SessionTurn:
+        """Appends the attachment text to the transcript and runs the guardrails on the whole of it.
+
+        Raises ``AttachmentError`` or ``InputRejectedError``. An instruction hidden in an attachment
+        is rejected like one in the transcript.
+        """
+        description = build_description(request.description, attachments)
+        safe_description = self._guardrails.check(description)
+        history_description = safe_description
+        if attachments:
+            # The transcript was already checked as part of the whole; only redact it again.
+            names = ", ".join(display_name(attachment.filename) for attachment in attachments)
+            history_description = f"{redact_pii(request.description)[0]}\n\n[attachments: {names}]"
+        return SessionTurn(
+            request=request.model_copy(update={"description": safe_description}),
+            history_description=history_description,
+        )
+
     def generate(
         self,
         request: EstimationRequest,
@@ -95,17 +130,25 @@ class EstimationService:
 
     def generate_for_session(
         self,
-        request: EstimationRequest,
+        turn: SessionTurn,
         session: Session,
         prompt_version: str = PROMPT_VERSION,
     ) -> str:
-        """One turn of a session: estimate with the known project facts, then update them.
+        """One session turn: the history window + the new message, then update history and metadata.
 
-        No caching (see the module docstring). A failed metadata extraction keeps the old facts.
+        The system prompt is rebuilt every turn from the current ``project_metadata``. No caching
+        (see the module docstring). A failed metadata extraction keeps the old facts.
         """
+        request = turn.request
         system, user = render_estimation_prompt(request, prompt_version, project_metadata=session.metadata)
-        text = self._provider.complete(system, user)
+        messages = [*session.history.to_messages_list(system), {"role": "user", "content": user}]
+        text = self._provider.complete_messages(messages)
         self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
+
+        _, history_user = render_estimation_prompt(
+            request.model_copy(update={"description": turn.history_description}), prompt_version
+        )
+        session.history.add_turn(history_user, text)
         session.metadata = self._metadata_extractor.update(session.metadata, request.description, text)
         return text
 

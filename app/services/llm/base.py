@@ -38,6 +38,19 @@ class StreamingLLMProvider(LLMProvider, Protocol):
     ) -> Iterator[str]: ...
 
 
+class ChatLLMProvider(LLMProvider, Protocol):
+    """Multi-turn completion: a full ``messages`` list (system first, then user/assistant turns).
+
+    Separate from ``LLMProvider`` (ISP): only session turns replay a conversation.
+    """
+
+    def complete_messages(self, messages: list[dict[str, str]]) -> str: ...
+
+
+class EstimationLLMProvider(StreamingLLMProvider, ChatLLMProvider, Protocol):
+    """Everything ``EstimationService`` uses: single-shot, streaming and multi-turn calls."""
+
+
 class ModerationProvider(Protocol):
     """Content moderation: returns the flagged category names (empty list = allowed)."""
 

@@ -50,7 +50,7 @@ def build_description(transcript: str, attachments: Sequence[Attachment]) -> str
     sections: list[str] = []
     total_chars = 0
     for attachment in attachments:
-        name = _display_name(attachment.filename)
+        name = display_name(attachment.filename)
         text = extract_text(name, attachment.content)
         total_chars += len(text)
         if total_chars > MAX_ATTACHMENTS_CHARS:
@@ -114,7 +114,7 @@ def _docx_text(content: bytes) -> str:
     return "\n".join(lines)
 
 
-def _display_name(filename: str) -> str:
+def display_name(filename: str) -> str:
     """Base name on a single line, so a crafted name cannot fake a separator or a new section."""
     name = PurePath(filename.replace("\\", "/")).name
     return re.sub(r"[\r\n\t]+", " ", name).strip() or "adjunto"

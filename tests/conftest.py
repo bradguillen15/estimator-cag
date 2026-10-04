@@ -68,12 +68,18 @@ class FakeProvider:
         self.error = error
         self.fail_after = fail_after
         self.calls: list[tuple[str, str]] = []
+        self.message_calls: list[list[dict[str, str]]] = []
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         self.calls.append((system_prompt, user_prompt))
         if self.error:
             raise self.error
         return self.text
+
+    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+        """Also recorded in ``calls`` as ``(system, last user message)``."""
+        self.message_calls.append(messages)
+        return self.complete(messages[0]["content"], messages[-1]["content"])
 
     def stream(
         self,

@@ -42,6 +42,9 @@ class ScriptedProvider:
             raise answer
         return answer
 
+    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+        return self.complete(messages[0]["content"], messages[-1]["content"])
+
     def stream(self, *args: object, **kwargs: object) -> None:
         raise NotImplementedError
 

@@ -143,7 +143,7 @@ Structure:
 
 ```
 app/services/llm/
-├── base.py       # LLMProvider / StreamingLLMProvider Protocols (the abstraction)
+├── base.py       # LLMProvider / StreamingLLMProvider / ChatLLMProvider Protocols (the abstraction)
 ├── litellm.py    # LiteLLMProvider (ordered model list with fallback; the only SDK user)
 └── factory.py    # get_llm_provider(settings) -> StreamingLLMProvider
 ```
@@ -173,7 +173,8 @@ A provider that silently truncates or returns a dict breaks every caller.
 `complete(system_prompt, user_prompt) -> str` is deliberately minimal. Do not widen the Protocol with
 streaming, embeddings or tool-calling until a real caller needs them — and when one does, add a
 *separate* Protocol (`StreamingLLMProvider`) rather than forcing every provider to implement dead
-methods.
+methods. Session turns replay a conversation, so they got their own: `ChatLLMProvider`
+(`complete_messages(messages)`); `EstimationLLMProvider` combines the three for the service.
 
 ### 4.5 DIP — depend on abstractions, inject them
 
