@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { checkHealth, getPromptContext } from '../api/client'
+import { EMPTY_PROJECT_METADATA } from '../api/types'
+import type { SessionInfo } from '../hooks/useSession'
+import { METADATA } from '../test/fixtures'
 import { withLocale } from '../test/render'
 import { Sidebar } from './Sidebar'
 
@@ -17,8 +20,9 @@ const getPromptContextMock = vi.mocked(getPromptContext)
 
 function renderSidebar(overrides: Partial<Parameters<typeof Sidebar>[0]> = {}, locale: 'es' | 'en' = 'es') {
   const props = {
-    streaming: false,
-    onStreamingChange: vi.fn(),
+    session: { id: null, metadata: EMPTY_PROJECT_METADATA, turns: 0 } as SessionInfo,
+    busy: false,
+    onNewConversation: vi.fn(),
     language: locale,
     onLanguageChange: vi.fn(),
     theme: 'light' as const,
@@ -67,20 +71,48 @@ describe('Sidebar', () => {
     expect(await screen.findByText('Error HTTP 500: Falta la plantilla')).toBeInTheDocument()
   })
 
-  it('toggles streaming and describes the endpoint in use', async () => {
-    const user = userEvent.setup()
-    const { onStreamingChange } = renderSidebar()
-    expect(screen.getByText(/JSON — mismo formulario/)).toBeInTheDocument()
+  it('shows the short session id, the project memory and the history turns', () => {
+    renderSidebar({ session: { id: '0123456789abcdef', metadata: METADATA, turns: 3 } })
 
-    await user.click(screen.getByRole('switch', { name: /streaming/i }))
-
-    expect(onStreamingChange).toHaveBeenCalledWith(true)
+    expect(screen.getByRole('heading', { name: 'Conversación' })).toBeInTheDocument()
+    expect(screen.getByText('01234567')).toBeInTheDocument()
+    expect(screen.queryByText(/89abcdef/)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Memoria del proyecto' })).toBeInTheDocument()
+    expect(screen.getByText('Portal de reservas')).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(screen.getByText('React, FastAPI')).toBeInTheDocument()
+    expect(screen.getByText('MVP con calendario')).toBeInTheDocument()
+    expect(screen.getByText('Turnos en el historial: 3')).toBeInTheDocument()
+    expect(screen.getByText(/La memoria guarda los hechos del proyecto/)).toBeInTheDocument()
   })
 
-  it('reflects streaming mode when it is on', () => {
-    renderSidebar({ streaming: true })
-    expect(screen.getByRole('switch', { name: /streaming/i })).toBeChecked()
-    expect(screen.getByText(/SSE — mismo formulario/)).toBeInTheDocument()
+  it('shows an em dash for every empty memory field', () => {
+    renderSidebar({ session: { id: 'abcdefgh', metadata: EMPTY_PROJECT_METADATA, turns: 0 } })
+    expect(screen.getAllByText('—')).toHaveLength(4)
+  })
+
+  it('starts a new conversation on click', async () => {
+    const user = userEvent.setup()
+    const { onNewConversation } = renderSidebar({ session: { id: 'abcdefgh', metadata: EMPTY_PROJECT_METADATA, turns: 0 } })
+
+    await user.click(screen.getByRole('button', { name: 'Nueva conversación' }))
+
+    expect(onNewConversation).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the new-conversation button while busy or without a session', () => {
+    renderSidebar({ busy: true, session: { id: 'abcdefgh', metadata: EMPTY_PROJECT_METADATA, turns: 0 } })
+    expect(screen.getByRole('button', { name: 'Nueva conversación' })).toBeDisabled()
+  })
+
+  it('disables the new-conversation button while the session is being created', () => {
+    renderSidebar()
+    expect(screen.getByRole('button', { name: 'Nueva conversación' })).toBeDisabled()
+  })
+
+  it('has no streaming switch anymore', () => {
+    renderSidebar()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
   it('offers Spanish and English as languages, with the current one selected', () => {

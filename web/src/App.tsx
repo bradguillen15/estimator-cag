@@ -1,11 +1,9 @@
-import { useState } from 'react'
-
 import type { EstimationInput, ResponseLanguage } from './api/types'
 import { EstimateForm } from './components/EstimateForm'
 import { EstimationResult } from './components/EstimationResult'
 import { Sidebar } from './components/Sidebar'
-import { useEstimation } from './hooks/useEstimation'
-import type { EstimationState } from './hooks/useEstimation'
+import { useSession } from './hooks/useSession'
+import type { EstimationState, SessionInfo } from './hooks/useSession'
 import { useResponseLanguage } from './hooks/useResponseLanguage'
 import { useTheme } from './hooks/useTheme'
 import type { Theme } from './hooks/useTheme'
@@ -15,9 +13,8 @@ import { useT } from './i18n/useLocale'
 export default function App() {
   const [theme, setTheme] = useTheme()
   const [language, setLanguage] = useResponseLanguage()
-  const [streaming, setStreaming] = useState(false)
-  const { state, run } = useEstimation()
-  const busy = state.status === 'loading' || state.status === 'streaming'
+  const { state, session, run, newConversation } = useSession()
+  const busy = state.status === 'loading'
 
   return (
     <LocaleProvider locale={language}>
@@ -26,11 +23,11 @@ export default function App() {
         setTheme={setTheme}
         language={language}
         setLanguage={setLanguage}
-        streaming={streaming}
-        setStreaming={setStreaming}
         busy={busy}
         state={state}
-        onSubmit={(input) => run({ ...input, language }, streaming)}
+        session={session}
+        onNewConversation={newConversation}
+        onSubmit={(input, files) => run({ ...input, language }, files)}
       />
     </LocaleProvider>
   )
@@ -41,11 +38,11 @@ interface AppShellProps {
   setTheme: (theme: Theme) => void
   language: ResponseLanguage
   setLanguage: (language: ResponseLanguage) => void
-  streaming: boolean
-  setStreaming: (streaming: boolean) => void
   busy: boolean
   state: EstimationState
-  onSubmit: (input: EstimationInput) => void
+  session: SessionInfo
+  onNewConversation: () => void
+  onSubmit: (input: EstimationInput, files: File[]) => void
 }
 
 function AppShell({
@@ -53,10 +50,10 @@ function AppShell({
   setTheme,
   language,
   setLanguage,
-  streaming,
-  setStreaming,
   busy,
   state,
+  session,
+  onNewConversation,
   onSubmit,
 }: AppShellProps) {
   const t = useT()
@@ -64,8 +61,9 @@ function AppShell({
   return (
     <div className="grid min-h-screen md:grid-cols-[288px_1fr]">
       <Sidebar
-        streaming={streaming}
-        onStreamingChange={setStreaming}
+        session={session}
+        busy={busy}
+        onNewConversation={onNewConversation}
         language={language}
         onLanguageChange={setLanguage}
         theme={theme}
@@ -87,7 +85,7 @@ function AppShell({
             {t('hero.subtitle.after')}
           </p>
 
-          <EstimateForm busy={busy} onSubmit={onSubmit} />
+          <EstimateForm key={session.id ?? 'pending'} busy={busy} onSubmit={onSubmit} />
           <EstimationResult state={state} />
         </div>
       </main>

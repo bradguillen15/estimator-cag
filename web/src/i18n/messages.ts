@@ -13,8 +13,16 @@ const es = {
   'hero.subtitle.after': 'y lo envía al servicio.',
 
   'sidebar.api': 'API',
-  'sidebar.streaming': 'Streaming (SSE)',
-  'sidebar.streaming.hint': '{mode} — mismo formulario, distinto endpoint.',
+  'sidebar.session': 'Conversación',
+  'sidebar.session.id': 'ID de sesión',
+  'sidebar.session.memory': 'Memoria del proyecto',
+  'sidebar.session.memory.name': 'Nombre',
+  'sidebar.session.memory.team': 'Equipo asumido',
+  'sidebar.session.memory.tech': 'Tecnologías',
+  'sidebar.session.memory.scope': 'Alcance acordado',
+  'sidebar.session.turns': 'Turnos en el historial: {count}',
+  'sidebar.session.hint': 'La memoria guarda los hechos del proyecto; el historial, los últimos turnos.',
+  'sidebar.session.new': 'Nueva conversación',
   'sidebar.cag': 'Contexto CAG',
   'sidebar.cag.hint': 'Ejemplos inyectados en el system prompt del servidor.',
   'sidebar.examples': 'Ejemplos estáticos',
@@ -35,10 +43,13 @@ const es = {
   'language.es': 'Español',
   'language.en': 'English',
 
-  'form.description': 'Descripción del proyecto',
+  'form.description': 'Transcripción o descripción del proyecto',
   'form.description.min': 'mínimo {min}',
   'form.placeholder':
     'Ej.: Necesitamos un MVP web de e-commerce con catálogo, carrito, pagos y panel de administración…',
+  'form.attachments': 'Adjuntos (PDF o Word)',
+  'form.attachments.hint': 'Máximo {max} archivos; se ignoran los extra.',
+  'form.attachments.remove': 'Quitar {name}',
   'form.projectType': 'Tipo de proyecto',
   'form.detailLevel': 'Nivel de detalle',
   'form.outputFormat': 'Formato de salida',
@@ -66,7 +77,6 @@ const es = {
   'error.connect':
     'No se pudo conectar a la API en {api}. Levanta el servicio con: uv run uvicorn app.main:app --reload',
   'error.http': 'Error HTTP {status}: {detail}',
-  'error.streamEmpty': 'La respuesta de streaming llegó vacía.',
   'error.unknown': 'Error desconocido',
 } as const
 
@@ -79,8 +89,16 @@ const en: { [K in keyof typeof es]: string } = {
   'hero.subtitle.after': 'and sends it to the service.',
 
   'sidebar.api': 'API',
-  'sidebar.streaming': 'Streaming (SSE)',
-  'sidebar.streaming.hint': '{mode} — same form, different endpoint.',
+  'sidebar.session': 'Conversation',
+  'sidebar.session.id': 'Session ID',
+  'sidebar.session.memory': 'Project memory',
+  'sidebar.session.memory.name': 'Name',
+  'sidebar.session.memory.team': 'Assumed team',
+  'sidebar.session.memory.tech': 'Technologies',
+  'sidebar.session.memory.scope': 'Agreed scope',
+  'sidebar.session.turns': 'Turns in history: {count}',
+  'sidebar.session.hint': 'Memory keeps the project facts; history keeps the latest turns.',
+  'sidebar.session.new': 'New conversation',
   'sidebar.cag': 'CAG context',
   'sidebar.cag.hint': 'Examples injected into the server system prompt.',
   'sidebar.examples': 'Static examples',
@@ -101,10 +119,13 @@ const en: { [K in keyof typeof es]: string } = {
   'language.es': 'Español',
   'language.en': 'English',
 
-  'form.description': 'Project description',
+  'form.description': 'Transcript or project description',
   'form.description.min': 'minimum {min}',
   'form.placeholder':
     'e.g. We need a web e-commerce MVP with catalog, cart, payments and an admin panel…',
+  'form.attachments': 'Attachments (PDF or Word)',
+  'form.attachments.hint': 'Up to {max} files; extras are ignored.',
+  'form.attachments.remove': 'Remove {name}',
   'form.projectType': 'Project type',
   'form.detailLevel': 'Detail level',
   'form.outputFormat': 'Output format',
@@ -132,7 +153,6 @@ const en: { [K in keyof typeof es]: string } = {
   'error.connect':
     'Could not connect to the API at {api}. Start the service with: uv run uvicorn app.main:app --reload',
   'error.http': 'HTTP error {status}: {detail}',
-  'error.streamEmpty': 'The streaming response arrived empty.',
   'error.unknown': 'Unknown error',
 }
 

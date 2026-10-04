@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { pdf } from '../test/fixtures'
 import { withLocale } from '../test/render'
 import { EstimateForm } from './EstimateForm'
 
@@ -15,7 +16,7 @@ function setup(busy = false, locale: 'es' | 'en' = 'es') {
     onSubmit,
     user,
     description: screen.getByLabelText(
-      locale === 'es' ? /descripción del proyecto/i : /project description/i,
+      locale === 'es' ? /transcripción o descripción del proyecto/i : /transcript or project description/i,
     ),
     submit: screen.getByRole('button', {
       name: locale === 'es' ? /generar estimación|generando/i : /generate estimate|generating/i,
@@ -50,12 +51,15 @@ describe('EstimateForm', () => {
     await user.type(description, `  ${DESCRIPTION}  `)
     await user.click(submit)
 
-    expect(onSubmit).toHaveBeenCalledWith({
-      description: DESCRIPTION,
-      project_type: 'mobile_app',
-      detail_level: 'medium',
-      output_format: 'phases_table',
-    })
+    expect(onSubmit).toHaveBeenCalledWith(
+      {
+        description: DESCRIPTION,
+        project_type: 'mobile_app',
+        detail_level: 'medium',
+        output_format: 'phases_table',
+      },
+      [],
+    )
   })
 
   it('submits the options the user picked', async () => {
@@ -67,12 +71,15 @@ describe('EstimateForm', () => {
     await user.selectOptions(screen.getByLabelText('Formato de salida'), 'Narrativo')
     await user.click(submit)
 
-    expect(onSubmit).toHaveBeenCalledWith({
-      description: DESCRIPTION,
-      project_type: 'data_pipeline',
-      detail_level: 'detailed',
-      output_format: 'narrative',
-    })
+    expect(onSubmit).toHaveBeenCalledWith(
+      {
+        description: DESCRIPTION,
+        project_type: 'data_pipeline',
+        detail_level: 'detailed',
+        output_format: 'narrative',
+      },
+      [],
+    )
   })
 
   it('shows English labels when the locale is English', async () => {
@@ -85,6 +92,7 @@ describe('EstimateForm', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ project_type: 'data_pipeline' }),
+      [],
     )
     expect(submit).toHaveTextContent('Generate estimate')
   })
@@ -113,5 +121,44 @@ describe('EstimateForm', () => {
     expect(submit).toHaveTextContent('Generando…')
     expect(submit).toBeDisabled()
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('passes the selected files on submit and lets the user remove one', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    const a = pdf('a.pdf')
+    const b = pdf('b.pdf')
+
+    await user.type(description, DESCRIPTION)
+    await user.upload(screen.getByLabelText(/adjuntos/i), [a, b])
+    expect(screen.getByText('a.pdf')).toBeInTheDocument()
+    expect(screen.getByText('b.pdf')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Quitar a.pdf' }))
+    expect(screen.queryByText('a.pdf')).not.toBeInTheDocument()
+
+    await user.click(submit)
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [b])
+  })
+
+  it('accepts only PDF and Word files in the picker', () => {
+    setup()
+    const input = screen.getByLabelText(/adjuntos/i)
+    expect(input).toHaveAttribute('accept', '.pdf,.docx')
+    expect(input).toHaveAttribute('multiple')
+  })
+
+  it('caps the attachments at 5 and shows a hint', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    const files = Array.from({ length: 7 }, (_, index) => pdf(`f${index}.pdf`))
+
+    await user.type(description, DESCRIPTION)
+    await user.upload(screen.getByLabelText(/adjuntos/i), files)
+
+    expect(screen.getAllByRole('button', { name: /^Quitar / })).toHaveLength(5)
+    expect(screen.queryByText('f5.pdf')).not.toBeInTheDocument()
+    expect(screen.getByText(/Máximo 5 archivos/)).toBeInTheDocument()
+
+    await user.click(submit)
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), files.slice(0, 5))
   })
 })

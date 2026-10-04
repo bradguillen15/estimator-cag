@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 
-import { DESCRIPTION_MAX, DESCRIPTION_MIN } from '../api/types'
+import { DESCRIPTION_MAX, DESCRIPTION_MIN, MAX_ATTACHMENTS } from '../api/types'
 import type { DetailLevel, EstimationInput, OutputFormat, ProjectType } from '../api/types'
 import { useLocale, useT } from '../i18n/useLocale'
 import { detailLevelOptions, outputFormatOptions, projectTypeOptions } from '../i18n/messages'
@@ -9,7 +9,7 @@ import { Chevron } from './icons'
 
 interface EstimateFormProps {
   busy: boolean
-  onSubmit: (input: EstimationInput) => void
+  onSubmit: (input: EstimationInput, files: File[]) => void
 }
 
 export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
@@ -19,18 +19,36 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
   const [projectType, setProjectType] = useState<ProjectType>('mobile_app')
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('medium')
   const [outputFormat, setOutputFormat] = useState<OutputFormat>('phases_table')
+  const [files, setFiles] = useState<File[]>([])
+  const [capped, setCapped] = useState(false)
 
   const length = description.trim().length
   const valid = length >= DESCRIPTION_MIN && length <= DESCRIPTION_MAX
 
   const submit = () => {
     if (!valid || busy) return
-    onSubmit({
-      description: description.trim(),
-      project_type: projectType,
-      detail_level: detailLevel,
-      output_format: outputFormat,
-    })
+    onSubmit(
+      {
+        description: description.trim(),
+        project_type: projectType,
+        detail_level: detailLevel,
+        output_format: outputFormat,
+      },
+      files,
+    )
+  }
+
+  const addFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(event.target.files ?? [])
+    event.target.value = '' // allow picking the same file again after removing it
+    const merged = [...files, ...picked]
+    setCapped(merged.length > MAX_ATTACHMENTS)
+    setFiles(merged.slice(0, MAX_ATTACHMENTS))
+  }
+
+  const removeFile = (index: number) => {
+    setCapped(false)
+    setFiles((current) => current.filter((_, position) => position !== index))
   }
 
   const handleSubmit = (event: FormEvent) => {
@@ -66,6 +84,43 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
         placeholder={t('form.placeholder')}
         className={`${CONTROL} block min-h-[150px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
       />
+
+      <div className="mt-5">
+        <label htmlFor="attachments" className="mb-2 block text-[13px] font-medium">
+          {t('form.attachments')}
+        </label>
+        <input
+          id="attachments"
+          type="file"
+          multiple
+          accept=".pdf,.docx"
+          onChange={addFiles}
+          className={`${CONTROL} cursor-pointer px-3 py-2 text-[13px] file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-[12.5px] file:font-medium file:text-ink`}
+        />
+        <p className={`mt-1.5 text-xs ${capped ? 'text-danger' : 'text-faint'}`}>
+          {t('form.attachments.hint', { max: MAX_ATTACHMENTS })}
+        </p>
+        {files.length > 0 && (
+          <ul className="mt-2 grid gap-1.5">
+            {files.map((file, index) => (
+              <li
+                key={`${file.name}-${index}`}
+                className="flex items-center justify-between gap-3 rounded-[10px] bg-field px-3 py-1.5 font-mono text-xs shadow-[0_0_0_1px_var(--line)]"
+              >
+                <span className="truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  aria-label={t('form.attachments.remove', { name: file.name })}
+                  className="cursor-pointer text-muted hover:text-danger focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="mt-5 grid gap-3.5 md:grid-cols-3">
         <Select

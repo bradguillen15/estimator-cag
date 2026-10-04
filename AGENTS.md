@@ -145,7 +145,7 @@ Structure:
 app/services/llm/
 ├── base.py       # LLMProvider / StreamingLLMProvider / ChatLLMProvider Protocols (the abstraction)
 ├── litellm.py    # LiteLLMProvider (ordered model list with fallback; the only SDK user)
-└── factory.py    # get_llm_provider(settings) -> StreamingLLMProvider
+└── factory.py    # get_llm_provider(settings) -> EstimationLLMProvider
 ```
 
 ```python

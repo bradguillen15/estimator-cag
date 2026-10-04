@@ -39,6 +39,13 @@ requests can carry PDF/Word attachments.
   `ChatLLMProvider.complete_messages` (LiteLLM `complete()` delegates to it),
   `EstimationService.prepare_session_turn` → `SessionTurn` (history keeps transcript +
   `[attachments: ...]` reference, PII-redacted). Route: inline.
+- [x] T6 — Client (course step 6): React UI always in session mode, streaming toggle and dead SSE
+  client code removed, file picker, project-memory panel + "New conversation" in the sidebar.
+  Backend: `SessionEstimationResponse` adds `project_metadata` + `history_turns`. Route: delegated
+  writer (12+ files under web/).
+- [x] T7 — Integration tests (course step 7): `tests/integration/test_session_flow.py` with
+  `httpx.AsyncClient` + ASGI transport (anyio): metadata across two turns, PDF changes the
+  estimate (content-aware fake LLM), 8 turns never exceed the window. Route: inline.
 
 ## Checks
 
@@ -46,6 +53,8 @@ requests can carry PDF/Word attachments.
 
 ## Progress
 
+- T6/T7: done (T7 commit `6a492d1`). Web: 70 tests, lint clean, build OK; API: 317 passed. Checked in the
+  browser: a session is created on load and "New conversation" replaces it. No real-LLM estimate run.
 - T1: done, commit `f72cd4b`. 8 tests in `tests/test_sessions.py`.
 - T5: done. 8 new tests (`test_session_history.py`, history + provider); 314 passed.
   The user should set `SESSION_MAX_TURNS=6` in `.env.example` if it still says 10.

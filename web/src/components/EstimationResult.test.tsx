@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import type { EstimationState } from '../hooks/useEstimation'
+import type { EstimationState } from '../hooks/useSession'
 import { DONE_META } from '../test/fixtures'
 import { withLocale } from '../test/render'
 import { EstimationResult } from './EstimationResult'
@@ -29,7 +29,7 @@ describe('EstimationResult', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('shows a busy placeholder while waiting for a JSON response', () => {
+  it('shows a busy placeholder while waiting for the response', () => {
     withLocale(<EstimationResult state={state({ status: 'loading' })} />)
 
     expect(screen.getByLabelText('Generando estimación')).toBeInTheDocument()
@@ -43,14 +43,7 @@ describe('EstimationResult', () => {
     expect(screen.getByRole('region', { name: 'Estimate' })).toBeInTheDocument()
   })
 
-  it('renders partial text while streaming', () => {
-    withLocale(<EstimationResult state={state({ status: 'streaming', text: '## Estimación: Res' })} />)
-
-    expect(screen.getByRole('heading', { name: 'Estimación: Res' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Estimación' })).toHaveAttribute('aria-busy', 'true')
-  })
-
-  it('renders the finished Markdown (tables, separate closing lines) and the generation metadata', () => {
+  it('renders the finished Markdown (tables, separate closing lines) and the prompt version', () => {
     withLocale(<EstimationResult state={state({ status: 'done', text: MARKDOWN, meta: DONE_META })} />)
 
     expect(screen.getByRole('heading', { name: 'Estimación: Reservas' })).toBeInTheDocument()
@@ -60,29 +53,17 @@ describe('EstimationResult', () => {
     expect(total.nextElementSibling?.tagName).toBe('BR')
 
     expect(screen.getByText('v1')).toBeInTheDocument()
-    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument()
-    expect(screen.getByText('3184→412 tok · 4.20s')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Estimación' })).toHaveAttribute('aria-busy', 'false')
   })
 
-  it('shows only the prompt version when the JSON endpoint gives no usage data', () => {
-    withLocale(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { prompt_version: 'v1' } })} />)
-
-    expect(screen.getByText('v1')).toBeInTheDocument()
-    expect(screen.queryByText(/tok/)).not.toBeInTheDocument()
-  })
-
-  it('shows a cached chip only for cache hits, in streaming metadata and JSON responses', () => {
+  it('shows a cached chip only for cache hits', () => {
     const { rerender } = withLocale(
-      <EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { ...DONE_META, cache_hit: true } })} />,
+      <EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { prompt_version: 'v1', cache_hit: true } })} />,
       'en',
     )
     expect(screen.getByText('cached')).toBeInTheDocument()
 
-    rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { prompt_version: 'v1', cache_hit: true } })} />)
-    expect(screen.getByText('cached')).toBeInTheDocument()
-
-    rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: { ...DONE_META, cache_hit: false } })} />)
+    rerender(<EstimationResult state={state({ status: 'done', text: 'Hecho', meta: DONE_META })} />)
     expect(screen.queryByText('cached')).not.toBeInTheDocument()
   })
 

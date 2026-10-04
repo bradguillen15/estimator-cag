@@ -76,7 +76,6 @@
 
   --animate-enter: enter 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
   --animate-shimmer: shimmer 1.3s linear infinite;
-  --animate-blink: blink 1s steps(2) infinite;
 }
 
 @keyframes enter {
@@ -88,11 +87,6 @@
 @keyframes shimmer {
   to {
     background-position: -200% 0;
-  }
-}
-@keyframes blink {
-  50% {
-    opacity: 0;
   }
 }
 
@@ -195,11 +189,6 @@
   .md-compact table {
     font-size: 12px;
   }
-
-  .caret::after {
-    content: '';
-    @apply ml-[3px] inline-block h-[1.05em] w-2 animate-blink rounded-[1px] bg-accent align-[-0.18em];
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -208,8 +197,7 @@
       opacity: 0;
     }
   }
-  .animate-shimmer,
-  .caret::after {
+  .animate-shimmer {
     animation: none;
   }
 }

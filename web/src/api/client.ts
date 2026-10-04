@@ -1,5 +1,5 @@
 import { t } from '../i18n/locale'
-import type { EstimationRequest, EstimationResponse, GenerationMeta, PromptContext, StreamEvent } from './types'
+import type { EstimationRequest, PromptContext, SessionCreatedResponse, SessionEstimationResponse } from './types'
 
 /** Empty = same origin (Vite proxy in dev, FastAPI serving web/dist in prod). */
 const API_BASE: string = import.meta.env.VITE_API_URL ?? ''
@@ -48,13 +48,6 @@ function formatDetail(detail: unknown): string | undefined {
   return undefined
 }
 
-const jsonInit = (body: unknown, signal?: AbortSignal): RequestInit => ({
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-  signal,
-})
-
 export async function checkHealth(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE}/health`)
@@ -69,71 +62,30 @@ export async function getPromptContext(): Promise<PromptContext> {
   return response.json()
 }
 
-export async function createEstimate(body: EstimationRequest, signal?: AbortSignal): Promise<EstimationResponse> {
-  const response = await send('/api/v1/estimate', jsonInit(body, signal))
+export async function createSession(signal?: AbortSignal): Promise<SessionCreatedResponse> {
+  const response = await send('/api/v1/sessions', { method: 'POST', signal })
   return response.json()
 }
 
-/** POST /api/v1/estimate/stream and yield its SSE events (EventSource can't POST). */
-export async function* streamEstimate(body: EstimationRequest, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
-  const response = await send('/api/v1/estimate/stream', {
-    ...jsonInit(body, signal),
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+/** Multipart request: no explicit Content-Type, the browser adds the boundary. */
+export async function createSessionEstimate(
+  sessionId: string,
+  request: EstimationRequest,
+  files: File[],
+  signal?: AbortSignal,
+): Promise<SessionEstimationResponse> {
+  const form = new FormData()
+  form.append('transcript', request.description)
+  form.append('project_type', request.project_type)
+  form.append('detail_level', request.detail_level)
+  form.append('output_format', request.output_format)
+  form.append('language', request.language)
+  for (const file of files) form.append('attachments', file)
+
+  const response = await send(`/api/v1/sessions/${encodeURIComponent(sessionId)}/estimate`, {
+    method: 'POST',
+    body: form,
+    signal,
   })
-  if (!response.body) throw new ApiError(t('error.streamEmpty'))
-
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buffer = ''
-  let pendingCR = false
-  try {
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) {
-        if (pendingCR) buffer += '\n'
-      } else {
-        const chunk: string = pendingCR ? `\r${value}` : (value ?? '')
-        pendingCR = chunk.endsWith('\r')
-        buffer += pendingCR ? chunk.slice(0, -1) : chunk
-        buffer = buffer.replace(/\r\n?/g, '\n')
-      }
-
-      let boundary: number
-      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-        const event = parseEvent(buffer.slice(0, boundary))
-        buffer = buffer.slice(boundary + 2)
-        if (event) yield event
-      }
-      if (done) break
-    }
-  } finally {
-    await reader.cancel().catch(() => {})
-  }
-}
-
-function parseEvent(block: string): StreamEvent | null {
-  let name = 'message'
-  const data: string[] = []
-  for (const line of block.split('\n')) {
-    if (line.startsWith(':')) continue // keep-alive comment
-    const colon = line.indexOf(':')
-    const field = colon === -1 ? line : line.slice(0, colon)
-    let value = colon === -1 ? '' : line.slice(colon + 1)
-    if (value.startsWith(' ')) value = value.slice(1)
-    if (field === 'event') name = value
-    else if (field === 'data') data.push(value)
-  }
-  if (data.length === 0) return null
-
-  // The server JSON-encodes every payload, so spaces and newlines inside tokens survive.
-  const payload: unknown = JSON.parse(data.join('\n'))
-  switch (name) {
-    case 'token':
-      return { type: 'token', text: payload as string }
-    case 'done':
-      return { type: 'done', meta: payload as GenerationMeta }
-    case 'error':
-      return { type: 'error', detail: (payload as { detail?: string }).detail ?? t('error.unknown') }
-    default:
-      return null
-  }
+  return response.json()
 }

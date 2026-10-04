@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { API_LABEL, checkHealth, getPromptContext } from '../api/client'
 import type { PromptContext, ResponseLanguage } from '../api/types'
 import { useT } from '../i18n/useLocale'
+import type { SessionInfo } from '../hooks/useSession'
 import type { Theme } from '../hooks/useTheme'
 import { Chevron, RulerMeasure } from './icons'
 import { LanguageToggle } from './LanguageToggle'
@@ -10,15 +11,16 @@ import { Markdown } from './Markdown'
 import { ThemeToggle } from './ThemeToggle'
 
 interface SidebarProps {
-  streaming: boolean
-  onStreamingChange: (streaming: boolean) => void
+  session: SessionInfo
+  busy: boolean
+  onNewConversation: () => void
   language: ResponseLanguage
   onLanguageChange: (language: ResponseLanguage) => void
   theme: Theme
   onThemeChange: (theme: Theme) => void
 }
 
-export function Sidebar({ streaming, onStreamingChange, language, onLanguageChange, theme, onThemeChange }: SidebarProps) {
+export function Sidebar({ session, busy, onNewConversation, language, onLanguageChange, theme, onThemeChange }: SidebarProps) {
   const t = useT()
 
   return (
@@ -33,20 +35,9 @@ export function Sidebar({ streaming, onStreamingChange, language, onLanguageChan
       <section>
         <SectionTitle>{t('sidebar.api')}</SectionTitle>
         <ApiStatus />
-        <label className="mt-3.5 flex cursor-pointer items-center justify-between gap-3 text-[13.5px]">
-          {t('sidebar.streaming')}
-          <input
-            type="checkbox"
-            role="switch"
-            checked={streaming}
-            onChange={(event) => onStreamingChange(event.target.checked)}
-            className="relative h-[19px] w-8 flex-none cursor-pointer appearance-none rounded-full bg-faint transition-colors duration-150 after:absolute after:top-[2.5px] after:left-[2.5px] after:size-3.5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:duration-200 after:ease-out-strong after:content-[''] checked:bg-btn checked:after:translate-x-[13px] checked:after:bg-btn-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:after:transition-none"
-          />
-        </label>
-        <p className="mt-2 text-[12.5px] text-muted">
-          {t('sidebar.streaming.hint', { mode: streaming ? 'SSE' : 'JSON' })}
-        </p>
       </section>
+
+      <SessionPanel session={session} busy={busy} onNewConversation={onNewConversation} />
 
       <section>
         <SectionTitle>{t('sidebar.cag')}</SectionTitle>
@@ -67,6 +58,59 @@ export function Sidebar({ streaming, onStreamingChange, language, onLanguageChan
         </section>
       </div>
     </aside>
+  )
+}
+
+const EM_DASH = '—'
+
+function SessionPanel({ session, busy, onNewConversation }: Pick<SidebarProps, 'session' | 'busy' | 'onNewConversation'>) {
+  const t = useT()
+  const { id, metadata, turns } = session
+  const rows: [string, string][] = [
+    [t('sidebar.session.memory.name'), metadata.project_name ?? EM_DASH],
+    [t('sidebar.session.memory.team'), metadata.assumed_team_size?.toString() ?? EM_DASH],
+    [
+      t('sidebar.session.memory.tech'),
+      metadata.mentioned_technologies.length > 0 ? metadata.mentioned_technologies.join(', ') : EM_DASH,
+    ],
+    [t('sidebar.session.memory.scope'), metadata.agreed_scope ?? EM_DASH],
+  ]
+
+  return (
+    <section>
+      <SectionTitle>{t('sidebar.session')}</SectionTitle>
+      <span
+        title={id ?? undefined}
+        className="inline-flex max-w-full items-center gap-2 rounded-full bg-field px-2.5 py-[5px] font-mono text-xs text-muted shadow-[0_0_0_1px_var(--line)]"
+      >
+        <span className="sr-only">{t('sidebar.session.id')}</span>
+        <span className="truncate">{id ? id.slice(0, 8) : EM_DASH}</span>
+      </span>
+
+      <div className="mt-3 rounded-[14px] bg-field px-3 py-2.5 shadow-[0_0_0_1px_var(--line)]">
+        <h4 className="mb-1.5 text-[13.5px] font-medium">{t('sidebar.session.memory')}</h4>
+        <dl className="grid gap-1.5 text-[12.5px]">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-faint">{label}</dt>
+              <dd className="text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <p className="mt-2.5 font-mono text-xs text-muted">{t('sidebar.session.turns', { count: turns })}</p>
+      <p className="mt-2 text-[12.5px] text-muted">{t('sidebar.session.hint')}</p>
+
+      <button
+        type="button"
+        onClick={onNewConversation}
+        disabled={busy || id === null}
+        className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-full bg-field px-4 text-[13.5px] font-medium shadow-[0_0_0_1px_var(--line-strong)] transition-[transform,opacity] duration-150 ease-out-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-35"
+      >
+        {t('sidebar.session.new')}
+      </button>
+    </section>
   )
 }
 

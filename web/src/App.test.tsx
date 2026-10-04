@@ -1,77 +1,107 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { checkHealth, createEstimate, getPromptContext, streamEstimate } from './api/client'
-import { DONE_META, streamOf } from './test/fixtures'
+import { checkHealth, createSession, createSessionEstimate, getPromptContext } from './api/client'
+import { METADATA, pdf, sessionEstimate } from './test/fixtures'
 
 vi.mock('./api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api/client')>()),
   checkHealth: vi.fn(),
   getPromptContext: vi.fn(),
-  createEstimate: vi.fn(),
-  streamEstimate: vi.fn(),
+  createSession: vi.fn(),
+  createSessionEstimate: vi.fn(),
 }))
 
 const DESCRIPTION = 'App móvil para reservar clases en un gimnasio.'
+const createSessionMock = vi.mocked(createSession)
+const estimateMock = vi.mocked(createSessionEstimate)
 
 beforeEach(() => {
   // The app defaults to English; most tests here assert the Spanish copy, so start from a saved 'es'.
   localStorage.setItem('response-language', 'es')
   vi.mocked(checkHealth).mockResolvedValue(true)
   vi.mocked(getPromptContext).mockResolvedValue({ prompt_version: 'v1', examples_markdown: '' })
+  createSessionMock.mockReset()
+  estimateMock.mockReset()
+  createSessionMock.mockResolvedValueOnce({ session_id: 'abcdef123456' })
 })
 
 async function fillForm() {
   const user = userEvent.setup()
   render(<App />)
-  await user.type(screen.getByLabelText(/descripción del proyecto/i), DESCRIPTION)
+  await screen.findByText('abcdef12')
+  await user.type(screen.getByLabelText(/transcripción o descripción del proyecto/i), DESCRIPTION)
   return user
 }
 
 describe('App', () => {
-  it('uses the JSON endpoint by default and shows the estimation', async () => {
-    vi.mocked(createEstimate).mockResolvedValue({ text: '## Estimación: Gimnasio', prompt_version: 'v1', cache_hit: false })
+  it('creates a session on load and shows its short id', async () => {
+    render(<App />)
+    expect(await screen.findByText('abcdef12')).toBeInTheDocument()
+    expect(createSessionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits through the session endpoint with the files and shows the estimation and memory', async () => {
+    estimateMock.mockResolvedValue(sessionEstimate({ text: '## Estimación: Gimnasio', history_turns: 1 }))
     const user = await fillForm()
+    const file = pdf('brief.pdf')
+    await user.upload(screen.getByLabelText(/adjuntos/i), file)
 
     await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
 
     expect(await screen.findByRole('heading', { name: 'Estimación: Gimnasio' })).toBeInTheDocument()
-    expect(createEstimate).toHaveBeenCalledWith(expect.objectContaining({ description: DESCRIPTION }), expect.any(AbortSignal))
-    expect(streamEstimate).not.toHaveBeenCalled()
+    expect(estimateMock).toHaveBeenCalledWith(
+      'abcdef123456',
+      expect.objectContaining({ description: DESCRIPTION, language: 'es' }),
+      [file],
+      expect.any(AbortSignal),
+    )
+    const memory = screen.getByRole('heading', { name: 'Memoria del proyecto' }).parentElement as HTMLElement
+    expect(within(memory).getByText(METADATA.project_name as string)).toBeInTheDocument()
+    expect(within(memory).getByText('React, FastAPI')).toBeInTheDocument()
+    expect(screen.getByText('Turnos en el historial: 1')).toBeInTheDocument()
   })
 
-  it('uses the streaming endpoint when the sidebar switch is on', async () => {
-    vi.mocked(streamEstimate).mockReturnValue(
-      streamOf({ type: 'token', text: '## Estimación: ' }, { type: 'token', text: 'Streaming' }, { type: 'done', meta: DONE_META }),
-    )
+  it('starts a new conversation: new session, cleared result and form', async () => {
+    estimateMock.mockResolvedValue(sessionEstimate({ text: '## Estimación: Gimnasio' }))
     const user = await fillForm()
-
-    await user.click(screen.getByRole('switch', { name: /streaming/i }))
     await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
+    await screen.findByRole('heading', { name: 'Estimación: Gimnasio' })
 
-    expect(await screen.findByRole('heading', { name: 'Estimación: Streaming' })).toBeInTheDocument()
-    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument()
-    expect(createEstimate).not.toHaveBeenCalled()
+    createSessionMock.mockResolvedValueOnce({ session_id: 'zzzzzzzz9999' })
+    await user.click(screen.getByRole('button', { name: 'Nueva conversación' }))
+
+    expect(await screen.findByText('zzzzzzzz')).toBeInTheDocument()
+    expect(createSessionMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('heading', { name: 'Estimación: Gimnasio' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/transcripción o descripción del proyecto/i)).toHaveValue('')
+    expect(screen.getByText('Turnos en el historial: 0')).toBeInTheDocument()
+  })
+
+  it('has no streaming switch', async () => {
+    render(<App />)
+    await screen.findByText('abcdef12')
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 
   it('sends the saved language and the newly selected language on the next request', async () => {
-    vi.mocked(createEstimate).mockResolvedValue({ text: '## Estimación: Gimnasio', prompt_version: 'v2', cache_hit: false })
+    estimateMock.mockResolvedValue(sessionEstimate({ text: '## Estimación: Gimnasio' }))
     const user = await fillForm()
 
     await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
     await screen.findByRole('heading', { name: 'Estimación: Gimnasio' })
-    expect(createEstimate).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'es' }), expect.any(AbortSignal))
+    expect(estimateMock).toHaveBeenLastCalledWith('abcdef123456', expect.objectContaining({ language: 'es' }), [], expect.any(AbortSignal))
 
     await user.click(screen.getByRole('radio', { name: /English/ }))
     await user.click(screen.getByRole('button', { name: 'Generate estimate' }))
-    expect(createEstimate).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }), expect.any(AbortSignal))
+    expect(estimateMock).toHaveBeenLastCalledWith('abcdef123456', expect.objectContaining({ language: 'en' }), [], expect.any(AbortSignal))
   })
 
   it('starts in English and dark with a fresh browser (no saved preferences)', async () => {
     localStorage.clear()
-    vi.mocked(createEstimate).mockResolvedValue({ text: '## Estimate: Gym', prompt_version: 'v3', cache_hit: false })
+    estimateMock.mockResolvedValue(sessionEstimate({ text: '## Estimate: Gym' }))
     const user = userEvent.setup()
     render(<App />)
 
@@ -80,9 +110,10 @@ describe('App', () => {
     expect(document.documentElement.lang).toBe('en')
     expect(document.documentElement.dataset.theme).toBe('dark')
 
-    await user.type(screen.getByLabelText(/project description/i), DESCRIPTION)
+    await screen.findByText('abcdef12')
+    await user.type(screen.getByLabelText(/transcript or project description/i), DESCRIPTION)
     await user.click(screen.getByRole('button', { name: 'Generate estimate' }))
-    expect(createEstimate).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }), expect.any(AbortSignal))
+    expect(estimateMock).toHaveBeenLastCalledWith('abcdef123456', expect.objectContaining({ language: 'en' }), [], expect.any(AbortSignal))
   })
 
   it('switches the visible UI copy when the language changes', async () => {
@@ -96,19 +127,9 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Software/)
     expect(screen.getByRole('button', { name: 'Generate estimate' })).toBeInTheDocument()
-    expect(screen.getByLabelText(/project description/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/transcript or project description/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New conversation' })).toBeInTheDocument()
     expect(document.documentElement.lang).toBe('en')
-  })
-
-  it('includes the language in streaming requests too', async () => {
-    vi.mocked(streamEstimate).mockReturnValue(streamOf({ type: 'done', meta: DONE_META }))
-    const user = await fillForm()
-
-    await user.click(screen.getByRole('radio', { name: /English/ }))
-    await user.click(screen.getByRole('switch', { name: /streaming/i }))
-    await user.click(screen.getByRole('button', { name: 'Generate estimate' }))
-
-    expect(streamEstimate).toHaveBeenCalledWith(expect.objectContaining({ language: 'en' }), expect.any(AbortSignal))
   })
 
   it('remembers the response language after a reload', async () => {
@@ -116,6 +137,7 @@ describe('App', () => {
     const { unmount } = render(<App />)
     await user.click(screen.getByRole('radio', { name: /English/ }))
     unmount()
+    createSessionMock.mockResolvedValue({ session_id: 'abcdef123456' })
 
     render(<App />)
 
@@ -124,9 +146,9 @@ describe('App', () => {
   })
 
   it('shows API failures and lets the user retry', async () => {
-    vi.mocked(createEstimate)
+    estimateMock
       .mockRejectedValueOnce(new Error('Error HTTP 502: El proveedor LLM tardó demasiado en responder.'))
-      .mockResolvedValueOnce({ text: '## Estimación: Reintento', prompt_version: 'v1', cache_hit: false })
+      .mockResolvedValueOnce(sessionEstimate({ text: '## Estimación: Reintento' }))
     const user = await fillForm()
     const submit = screen.getByRole('button', { name: 'Generar estimación' })
 

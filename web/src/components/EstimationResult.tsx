@@ -1,7 +1,5 @@
-import type { ReactNode } from 'react'
-
 import type { GenerationMeta } from '../api/types'
-import type { EstimationState } from '../hooks/useEstimation'
+import type { EstimationState } from '../hooks/useSession'
 import { useT } from '../i18n/useLocale'
 import { Markdown } from './Markdown'
 
@@ -38,7 +36,7 @@ export function EstimationResult({ state }: { state: EstimationState }) {
         {state.status === 'loading' ? (
           <Skeleton label={t('result.generating')} />
         ) : (
-          <Markdown className={state.status === 'streaming' ? 'caret' : ''}>{state.text}</Markdown>
+          <Markdown>{state.text}</Markdown>
         )}
       </article>
     </section>
@@ -47,16 +45,6 @@ export function EstimationResult({ state }: { state: EstimationState }) {
 
 function MetaChips({ meta }: { meta: GenerationMeta }) {
   const t = useT()
-  const chips: ReactNode[] = [
-    <>
-      prompt_version <b className="font-medium text-ink">{meta.prompt_version}</b>
-    </>,
-  ]
-  if (meta.model) chips.push(meta.model)
-  if (meta.input_tokens != null && meta.output_tokens != null) {
-    chips.push(`${meta.input_tokens}→${meta.output_tokens} tok${meta.latency_seconds != null ? ` · ${meta.latency_seconds.toFixed(2)}s` : ''}`)
-  }
-
   return (
     <div className="flex flex-wrap gap-1.5">
       {meta.cache_hit && (
@@ -64,11 +52,9 @@ function MetaChips({ meta }: { meta: GenerationMeta }) {
           {t('result.cached')}
         </span>
       )}
-      {chips.map((chip, index) => (
-        <span key={index} className="rounded-full bg-field px-[9px] py-[3px] font-mono text-[11.5px] text-muted shadow-[0_0_0_1px_var(--line)]">
-          {chip}
-        </span>
-      ))}
+      <span className="rounded-full bg-field px-[9px] py-[3px] font-mono text-[11.5px] text-muted shadow-[0_0_0_1px_var(--line)]">
+        prompt_version <b className="font-medium text-ink">{meta.prompt_version}</b>
+      </span>
     </div>
   )
 }
