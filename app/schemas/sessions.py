@@ -41,14 +41,23 @@ class SessionSummary(BaseModel):
     updated_at: datetime
 
 
+class SessionTurnView(BaseModel):
+    """One turn as the UI shows it: what the user typed and the estimate that came back."""
+
+    description: str = Field(description="The transcript as typed, without extracted attachment text.")
+    attachment_names: list[str] = Field(default_factory=list)
+    estimate: str
+    prompt_version: str
+    cache_hit: bool = False
+    created_at: datetime
+
+
 class SessionDetail(BaseModel):
-    """What the UI needs to resume a session: its memory and the last estimate."""
+    """What the UI needs to resume a session: its memory and its turns (capped by the history window)."""
 
     session_id: str
     project_metadata: ProjectMetadata
     history_turns: int = Field(description="Turns kept in the history window.")
-    last_estimate: str | None = Field(
-        default=None, description="Last assistant message in the history window, if any."
-    )
+    turns: list[SessionTurnView] = Field(default_factory=list, description="Oldest first.")
     created_at: datetime
     updated_at: datetime

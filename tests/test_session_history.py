@@ -85,3 +85,23 @@ def test_history_never_stores_raw_pii(client: TestClient, session_store: Session
     _post(client, session, data={**FORM, "transcript": transcript}, files=[pdf])
 
     assert "ana@example.com" not in session.history.messages[0]["content"]
+
+
+def test_display_turns_store_what_was_typed_and_attachment_names_not_their_text(
+    client: TestClient, session_store: SessionStore, fake_provider: FakeProvider
+) -> None:
+    session = session_store.create()
+    pdf = ("attachments", ("spec.pdf", _pdf("Login with SSO"), "application/pdf"))
+
+    _post(client, session, data=FORM, files=[pdf])
+    _post(client, session, data=FORM)
+
+    first, second = session.turns
+    assert first.description == FORM["transcript"]
+    assert first.attachment_names == ("spec.pdf",)
+    assert first.estimate == fake_provider.text
+    assert first.prompt_version
+    assert "Login with SSO" not in first.description
+    assert second.attachment_names == ()
+    body = client.get(f"/api/v1/sessions/{session.session_id}").json()
+    assert [t["attachment_names"] for t in body["turns"]] == [["spec.pdf"], []]

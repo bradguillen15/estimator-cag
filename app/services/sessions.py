@@ -67,6 +67,22 @@ class ConversationHistory:
         return len(self._messages) // 2
 
 
+@dataclass(frozen=True)
+class TurnRecord:
+    """What the UI shows for one turn: the message as typed and the estimate it got.
+
+    Display data only. The LLM never sees it: the replayed history lives in ``ConversationHistory``.
+    ``description`` is the typed transcript (PII-redacted), never the extracted attachment text.
+    """
+
+    description: str
+    attachment_names: tuple[str, ...]
+    estimate: str
+    prompt_version: str
+    cache_hit: bool = False  # session turns skip the response caches
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
 @dataclass
 class Session:
     session_id: str
@@ -74,10 +90,17 @@ class Session:
     metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    turns: list[TurnRecord] = field(default_factory=list)
 
-    def record_turn(self, user_content: str, assistant_content: str) -> None:
-        """Add a turn to the history window and bump ``updated_at``."""
+    def record_turn(self, user_content: str, assistant_content: str, display: TurnRecord | None = None) -> None:
+        """Add a turn to the history window and bump ``updated_at``.
+
+        ``display`` is kept in step with the history: same window, oldest dropped first.
+        """
         self.history.add_turn(user_content, assistant_content)
+        if display is not None:
+            self.turns.append(display)
+            del self.turns[: -self.history.max_turns]
         self.updated_at = datetime.now(UTC)
 
 

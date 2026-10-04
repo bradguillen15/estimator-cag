@@ -24,7 +24,7 @@ from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
 from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
 from app.services.metadata_extractor import MetadataExtractor
-from app.services.sessions import Session
+from app.services.sessions import Session, TurnRecord
 
 __all__ = ["PROMPT_VERSION", "EstimationService", "SessionTurn"]
 
@@ -43,6 +43,8 @@ class SessionTurn:
 
     request: EstimationRequest
     history_description: str
+    display_description: str  # the transcript as typed (redacted), without attachment text
+    attachment_names: tuple[str, ...] = ()
 
 
 class EstimationService:
@@ -92,14 +94,17 @@ class EstimationService:
         """
         description = build_description(request.description, attachments)
         safe_description = self._guardrails.check(description)
-        history_description = safe_description
+        history_description = display_description = safe_description
+        names = tuple(display_name(attachment.filename) for attachment in attachments)
         if attachments:
             # The transcript was already checked as part of the whole; only redact it again.
-            names = ", ".join(display_name(attachment.filename) for attachment in attachments)
-            history_description = f"{redact_pii(request.description)[0]}\n\n[attachments: {names}]"
+            display_description = redact_pii(request.description)[0]
+            history_description = f"{display_description}\n\n[attachments: {', '.join(names)}]"
         return SessionTurn(
             request=request.model_copy(update={"description": safe_description}),
             history_description=history_description,
+            display_description=display_description,
+            attachment_names=names,
         )
 
     def generate(
@@ -148,7 +153,16 @@ class EstimationService:
         _, history_user = render_estimation_prompt(
             request.model_copy(update={"description": turn.history_description}), prompt_version
         )
-        session.record_turn(history_user, text)
+        session.record_turn(
+            history_user,
+            text,
+            TurnRecord(
+                description=turn.display_description,
+                attachment_names=turn.attachment_names,
+                estimate=text,
+                prompt_version=prompt_version,
+            ),
+        )
         session.metadata = self._metadata_extractor.update(
             session.metadata, request.description, text, request.language.value
         )

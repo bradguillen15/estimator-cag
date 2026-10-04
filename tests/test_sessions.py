@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.exceptions import SessionNotFoundError
 from app.schemas.sessions import ProjectMetadata
-from app.services.sessions import DEFAULT_MAX_TURNS, ConversationHistory, SessionStore
+from app.services.sessions import DEFAULT_MAX_TURNS, ConversationHistory, SessionStore, TurnRecord
 
 # --- ConversationHistory ----------------------------------------------------------------------
 
@@ -207,13 +207,33 @@ def test_list_sessions_is_empty_without_turns(client: TestClient, session_store:
 # --- GET /sessions/{id} -----------------------------------------------------------------------
 
 
-def test_get_session_returns_metadata_and_the_last_estimate(
+def _record(n: int, attachments: tuple[str, ...] = ()) -> TurnRecord:
+    return TurnRecord(
+        description=f"typed {n}",
+        attachment_names=attachments,
+        estimate=f"a{n}",
+        prompt_version="v3",
+        created_at=datetime(2026, 1, 1, 10, n, tzinfo=UTC),
+    )
+
+
+def test_record_turn_trims_display_turns_with_the_history_window() -> None:
+    session = SessionStore(max_turns=2).create()
+
+    for n in range(1, 4):
+        session.record_turn(f"u{n}", f"a{n}", _record(n))
+
+    assert [t.description for t in session.turns] == ["typed 2", "typed 3"]
+    assert len(session.history) == 2
+
+
+def test_get_session_returns_metadata_and_turns_in_order(
     client: TestClient, session_store: SessionStore
 ) -> None:
     session = session_store.create()
     session.metadata.project_name = "Portal"
-    session.record_turn("u1", "a1")
-    session.record_turn("u2", "a2")
+    session.record_turn("u1", "a1", _record(1, ("spec.pdf",)))
+    session.record_turn("u2", "a2", _record(2))
 
     response = client.get(f"/api/v1/sessions/{session.session_id}")
 
@@ -222,17 +242,21 @@ def test_get_session_returns_metadata_and_the_last_estimate(
     assert body["session_id"] == session.session_id
     assert body["project_metadata"]["project_name"] == "Portal"
     assert body["history_turns"] == 2
-    assert body["last_estimate"] == "a2"
+    assert "last_estimate" not in body
+    assert [t["description"] for t in body["turns"]] == ["typed 1", "typed 2"]
+    assert [t["estimate"] for t in body["turns"]] == ["a1", "a2"]
+    assert body["turns"][0]["attachment_names"] == ["spec.pdf"]
+    assert body["turns"][1]["attachment_names"] == []
+    assert body["turns"][0]["prompt_version"] == "v3"
+    assert body["turns"][0]["cache_hit"] is False
 
 
-def test_get_session_without_turns_has_no_last_estimate(
-    client: TestClient, session_store: SessionStore
-) -> None:
+def test_get_session_without_turns_has_no_turns(client: TestClient, session_store: SessionStore) -> None:
     session = session_store.create()
 
     body = client.get(f"/api/v1/sessions/{session.session_id}").json()
 
-    assert body["last_estimate"] is None
+    assert body["turns"] == []
     assert body["history_turns"] == 0
 
 

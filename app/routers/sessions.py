@@ -14,6 +14,7 @@ from app.schemas.sessions import (
     SessionDetail,
     SessionEstimationResponse,
     SessionSummary,
+    SessionTurnView,
 )
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.sessions import Session, SessionStore
@@ -49,12 +50,21 @@ def list_sessions(store: Store) -> list[SessionSummary]:
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
 def get_session_detail(session: CurrentSession) -> SessionDetail:
-    assistant_messages = [m["content"] for m in session.history.messages if m["role"] == "assistant"]
     return SessionDetail(
         session_id=session.session_id,
         project_metadata=session.metadata,
         history_turns=len(session.history),
-        last_estimate=assistant_messages[-1] if assistant_messages else None,
+        turns=[
+            SessionTurnView(
+                description=t.description,
+                attachment_names=list(t.attachment_names),
+                estimate=t.estimate,
+                prompt_version=t.prompt_version,
+                cache_hit=t.cache_hit,
+                created_at=t.created_at,
+            )
+            for t in session.turns
+        ],
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
