@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.exceptions import AttachmentError
 from app.prompts.loader import render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
+from app import dependencies
 from app.services import attachments
 from app.services.attachments import Attachment, build_description, extract_text
 from app.services.sessions import SessionStore
@@ -191,6 +192,21 @@ def test_bad_attachment_is_400(client: TestClient, session_store: SessionStore) 
 
     assert response.status_code == 400
     assert "no es un PDF" in response.json()["detail"]
+
+
+def test_too_many_attachments_are_400_before_reading_any_upload(
+    client: TestClient, session_store: SessionStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _no_read(*_args: object, **_kwargs: object) -> Attachment:
+        raise AssertionError("an upload was read before the attachment count was checked")
+
+    monkeypatch.setattr(dependencies, "Attachment", _no_read)
+    files = [("attachments", (f"f{n}.pdf", b"%PDF-", "application/pdf")) for n in range(attachments.MAX_ATTACHMENTS + 1)]
+
+    response = client.post(_url(session_store), data=FORM, files=files)
+
+    assert response.status_code == 400
+    assert "como máximo" in response.json()["detail"]
 
 
 def test_injection_hidden_in_an_attachment_is_400(

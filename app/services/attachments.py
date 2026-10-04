@@ -32,6 +32,12 @@ _PDF_MAGIC = b"%PDF-"
 _ZIP_MAGIC = b"PK\x03\x04"  # .docx is a zip package
 
 
+def check_attachment_count(count: int) -> None:
+    """Raise ``AttachmentError`` when more than ``MAX_ATTACHMENTS`` files are sent."""
+    if count > MAX_ATTACHMENTS:
+        raise AttachmentError(f"Puedes adjuntar como máximo {MAX_ATTACHMENTS} archivos.")
+
+
 @dataclass(frozen=True)
 class Attachment:
     filename: str
@@ -44,8 +50,7 @@ def build_description(transcript: str, attachments: Sequence[Attachment]) -> str
     Raises ``AttachmentError`` on too many/too large files, an unsupported or unreadable file,
     a file without extractable text, or too much extracted text overall.
     """
-    if len(attachments) > MAX_ATTACHMENTS:
-        raise AttachmentError(f"Puedes adjuntar como máximo {MAX_ATTACHMENTS} archivos.")
+    check_attachment_count(len(attachments))
 
     sections: list[str] = []
     total_chars = 0

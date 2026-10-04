@@ -10,7 +10,7 @@ from app.config import settings
 from app.exceptions import UnknownPromptVersionError
 from app.prompts.loader import PROMPT_VERSION, available_prompt_versions
 from app.schemas.estimations import DetailLevel, EstimationRequest, OutputFormat, ProjectType
-from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment
+from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, check_attachment_count
 from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
 from app.services.estimation_service import EstimationService, SessionTurn
@@ -125,9 +125,11 @@ def get_safe_session_request(
             "language": language,
         }
     )
+    uploads = attachments or []
+    check_attachment_count(len(uploads))  # before reading any upload stream
     files = [
         # Read one byte past the limit: enough to reject an oversized file without loading it all.
         Attachment(filename=upload.filename or "adjunto", content=upload.file.read(MAX_ATTACHMENT_BYTES + 1))
-        for upload in attachments or []
+        for upload in uploads
     ]
     return service.prepare_session_turn(request, files)
