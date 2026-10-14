@@ -141,7 +141,7 @@ of actor attempts) allows it; `reject` stops at once. The last draft is always r
 Critic failure (provider error, invalid JSON) accepts the draft and is logged. **Cost: up to
 2 x `REVIEW_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
 critic). `CRITIC_MODEL` (optional `<provider>/<model>`, e.g. a cheaper one) overrides the model;
-empty reuses `LLM_MODELS`. Both caches are bypassed. No UI yet.
+empty reuses `LLM_MODELS`. Both caches are bypassed. The UI exposes it on session turns through the "Critic review" toggle.
 
 `POST /sessions/{id}/estimate/reviewed` runs the same ReviewLoop on the session conversation (memory, metadata,
 audience and history window in the actor prompt; the `critic_feedback` block is added on retries).

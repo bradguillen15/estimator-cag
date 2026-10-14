@@ -48,6 +48,19 @@ def test_provider_error_is_reported_per_case_and_fails(capsys: pytest.CaptureFix
     assert len(service.calls) == len(load_dataset())  # a failure did not abort the run
 
 
+def test_one_errored_case_fails_the_run_despite_a_passing_aggregate(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ok = [run.CaseReport(f"ok{i}", [run.MetricResult("m", 1.0, True, "")]) for i in range(6)]
+    reports = [*ok, run.CaseReport("bad", [], error="RuntimeError: boom")]
+    assert run.aggregate_score(reports) >= 0.8
+    monkeypatch.setattr(run, "evaluate_case", lambda service, case, version: reports.pop(0))
+
+    assert run.main(["--threshold", "0.8"], service=FakeEvalService()) == 1
+    assert "FAIL" in capsys.readouterr().out
+    assert "1 errored" in run.format_report([run.CaseReport("bad", [], error="x")], 0.0)
+
+
 def test_prompt_version_is_forwarded() -> None:
     service = FakeEvalService("x")
     run.main(["--case", load_dataset()[0].id, "--prompt-version", "v2"], service=service)

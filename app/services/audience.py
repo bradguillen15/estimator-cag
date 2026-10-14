@@ -7,7 +7,7 @@ explainable: the resolver returns the tier *and* the name of the rule that chose
 Precedence (first match wins):
 
 1. ``explicit_override``  the caller sent ``audience`` -> that value, always.
-2. ``compliance_terms``   NDA, confidentiality, regulatory (GDPR, HIPAA...), board or investor
+2. ``compliance_terms``   NDA, confidentiality, regulatory (GDPR, HIPAA...), board of directors/meeting or investor
                           -> executive (these readers want risks and ranges, not detail).
 3. ``executive_terms``    C-level / sponsor vocabulary (CEO, ROI, business case...) -> executive.
 4. ``technical_audience`` two or more distinct developer keywords -> developer.
@@ -37,7 +37,7 @@ _COMPLIANCE = re.compile(
     r"acuerdo de confidencialidad|under embargo|legal hold|"
     r"hipaa|gdpr|rgpd|sox|pci[- ]?dss|fda|iso[- ]?27001|ccpa|"
     r"regulator[iy]|regulatory|regulatorio|regulaci[oó]n|"
-    r"board|investors?|inversores|inversionistas|junta directiva|consejo de administraci[oó]n)\b",
+    r"board of directors|board meeting|investors?|inversores|inversionistas|junta directiva|consejo de administraci[oó]n)\b",
     _FLAGS,
 )
 _EXECUTIVE = re.compile(

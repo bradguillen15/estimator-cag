@@ -51,7 +51,7 @@ _ANCHOR_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
             _FLAGS,
         ),
     ),
-    ("compliance", re.compile(r"\b(hipaa|gdpr|rgpd|lopd|sox|pci[- ]?dss|fda|iso[- ]?27001|compliance|regulator(?:y|io)|regulaci[oó]n|normativa)\b", _FLAGS)),
+    ("compliance", re.compile(r"\b(hipaa|gdpr|rgpd|lopd|sox|pci[- ]?dss|fda|iso[- ]?27001|regulator(?:y|io)|regulaci[oó]n|normativa)\b", _FLAGS)),
     (
         "deadline_hard",
         re.compile(

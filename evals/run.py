@@ -57,6 +57,11 @@ def aggregate_score(reports: Sequence[CaseReport]) -> float:
     return sum(r.score for r in reports) / len(reports) if reports else 0.0
 
 
+def _passed(reports: Sequence[CaseReport], threshold: float) -> bool:
+    """An errored case fails the run even if the aggregate score clears the threshold."""
+    return not any(r.error for r in reports) and aggregate_score(reports) >= threshold
+
+
 def format_report(reports: Sequence[CaseReport], threshold: float) -> str:
     lines = [f"{'case':<40} {'score':>5}  details"]
     for report in reports:
@@ -66,8 +71,10 @@ def format_report(reports: Sequence[CaseReport], threshold: float) -> str:
         details = "; ".join(f"{m.name}={'ok' if m.passed else 'FAIL'} ({m.details})" for m in report.metrics)
         lines.append(f"{report.case_id:<40} {report.score:>5.2f}  {details}")
     total = aggregate_score(reports)
-    verdict = "PASS" if total >= threshold else "FAIL"
-    lines.append(f"\naggregate score: {total:.2f} (threshold {threshold:.2f}) -> {verdict}")
+    errored = sum(1 for r in reports if r.error)
+    verdict = "PASS" if _passed(reports, threshold) else "FAIL"
+    suffix = f", {errored} errored case(s)" if errored else ""
+    lines.append(f"\naggregate score: {total:.2f} (threshold {threshold:.2f}{suffix}) -> {verdict}")
     return "\n".join(lines)
 
 
@@ -103,7 +110,7 @@ def main(argv: Sequence[str] | None = None, service: EvalService | None = None) 
         return 2
     reports = [evaluate_case(service, case, args.prompt_version) for case in cases]
     print(format_report(reports, args.threshold))
-    return 0 if aggregate_score(reports) >= args.threshold else 1
+    return 0 if _passed(reports, args.threshold) else 1
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ export function EstimationResult({ state }: { state: EstimationCardState }) {
         {done ? (
           <Markdown>{state.text}</Markdown>
         ) : (
-          <Skeleton label={t(state.reviewing ? 'result.reviewing' : 'result.generating')} />
+          <Skeleton label={t('result.generating')} />
         )}
         {!done && state.reviewing && (
           <p role="status" className="mt-4 text-[13px] text-muted">

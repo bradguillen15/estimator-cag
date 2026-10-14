@@ -99,7 +99,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Desarrollo')).toHaveAttribute('title', 'Regla: dev_keywords')
   })
 
-  it('hides the session memory when there is nothing to show, and the summary line when it is empty', () => {
+  it('hides the session memory panel when there is nothing to show', () => {
     renderSidebar({
       session: { id: 'abcdefgh', metadata: METADATA, turns: 1, memory: { anchors: 0, summaryChars: 0, audience: null, audienceRule: null } },
     })

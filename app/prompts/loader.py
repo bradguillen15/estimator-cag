@@ -107,7 +107,7 @@ def _system_prompt_with_metadata(
     )
 
 
-_MEMORY_TAG_RE = re.compile(r"<(/?)\s*(conversation_summary|conversation_commitments|commitment)\b", re.IGNORECASE)
+_MEMORY_TAG_RE = re.compile(r"<(/?)\s*(conversation_summary|conversation_commitments|commitment|user|assistant)\b", re.IGNORECASE)
 
 
 def _neutralize(memory: HistoryMemory) -> HistoryMemory:
@@ -122,6 +122,7 @@ def _neutralize(memory: HistoryMemory) -> HistoryMemory:
     )
 
 
+_CRITIC_TAG_RE = re.compile(r"<(/?)\s*(project_description|estimate_under_review)\b", re.IGNORECASE)
 _FEEDBACK_TAG_RE = re.compile(r"<(/?)\s*(critic_feedback|issue)\b", re.IGNORECASE)
 
 
@@ -276,9 +277,13 @@ def render_critic_prompt(
     """Return ``(system, user)`` prompts for the LLM that audits an estimate and answers with JSON."""
     environment = _critic_environment(version)
     system = environment.get_template("system.j2").render().strip()
+    # Both texts come from users / an LLM: defuse tags that would close the template's blocks early.
     user = (
         environment.get_template("user.j2")
-        .render(description=description.strip(), estimate=estimate.strip())
+        .render(
+            description=_CRITIC_TAG_RE.sub(r"<\1 \2", description.strip()),
+            estimate=_CRITIC_TAG_RE.sub(r"<\1 \2", estimate.strip()),
+        )
         .strip()
     )
     return system, user

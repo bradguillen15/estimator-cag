@@ -17,7 +17,7 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
 
 - In: the four features below, their settings, tests, README/AGENTS updates, `types.ts` mirror for
   any schema field the UI receives.
-- Out: UI controls for ACB or tier, persistence of sessions, LLM-based anchor classifier, session
+- Out: persistence of sessions, LLM-based anchor classifier, session
   TTL/eviction, the small session_5 gaps (per-page PDF tolerance, extractor retries).
 
 ## Constraints
