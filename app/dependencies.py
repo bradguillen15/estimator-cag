@@ -9,7 +9,7 @@ from fastapi import Depends, File, Form, Query, UploadFile
 from app.config import settings
 from app.exceptions import UnknownPromptVersionError
 from app.prompts.loader import PROMPT_VERSION, available_prompt_versions
-from app.schemas.estimations import DetailLevel, EstimationRequest, OutputFormat, ProjectType
+from app.schemas.estimations import Audience, DetailLevel, EstimationRequest, OutputFormat, ProjectType
 from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, check_attachment_count
 from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
@@ -125,6 +125,7 @@ def get_safe_session_request(
     service: Annotated[EstimationService, Depends(get_estimation_service)],
     _prompt_version: Annotated[str, Depends(get_prompt_version)],
     language: Annotated[str | None, Form()] = None,
+    audience: Annotated[Audience | None, Form(description="Explicit audience tier; omit to infer it.")] = None,
     attachments: Annotated[list[UploadFile] | None, File(description="PDF or Word (.docx) files.")] = None,
 ) -> SessionTurn:
     """The multipart request (transcript + attachments) after extraction and the input guardrails.
@@ -140,6 +141,7 @@ def get_safe_session_request(
             "detail_level": detail_level,
             "output_format": output_format,
             "language": language,
+            "audience": audience,
         }
     )
     uploads = attachments or []

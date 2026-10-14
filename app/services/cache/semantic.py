@@ -27,7 +27,7 @@ from redisvl.query import VectorQuery
 from redisvl.query.filter import Tag
 
 from app.config import Settings
-from app.schemas.estimations import EstimationRequest
+from app.schemas.estimations import Audience, EstimationRequest
 from app.services.cache.base import CachedAnswer
 from app.services.llm.base import EmbeddingProvider
 
@@ -55,10 +55,15 @@ def models_scope(models: Sequence[str]) -> str:
 
 
 def make_bucket(request: EstimationRequest, prompt_version: str) -> str:
-    return (
+    # ``request.audience`` is the resolved tier: a different tier is a different answer, so it must
+    # not share a bucket. The default adds nothing, which keeps existing buckets valid.
+    bucket = (
         f"{prompt_version}:{request.project_type.value}:{request.detail_level.value}"
         f":{request.output_format.value}:{request.language.value}"
     )
+    if request.audience not in (None, Audience.DEFAULT):
+        bucket += f":{request.audience.value}"
+    return bucket
 
 
 class NoOpSemanticCache:

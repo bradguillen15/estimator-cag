@@ -62,11 +62,15 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   block, returning the final estimate plus the iteration trail. New endpoint
   `POST /api/v1/estimate/acb` (input guardrails via `get_safe_request`). Critic failure → accept
   the actor output (logged). Route: delegated writer.
-- [ ] T4 — Audience tier. Pure regex resolver (precedence: explicit request field > NDA/regulatory
+- [x] T4 — Audience tier. Pure regex resolver (precedence: explicit request field > NDA/regulatory
   → executive > ≥2 dev keywords → developer > small team (≤2) → developer... final rule set
   documented in code) returning tier + rule name; trailing `audience` block (absent for `default`).
   Optional `audience` field on estimate + session requests; resolved tier/rule exposed on the
   session detail and estimate responses (+ `types.ts`). Route: delegated writer.
+- [ ] T5 — Architecture diagram (added by user request). Check whether T1–T4 change
+  `docs/architecture/estimation-flow/` (ACB path, compression/tier on session turns); if so update
+  `candidate.json` from the code and re-run archify `finalize --repo-root .`, separate commit
+  (`docs(architecture): ...`). Route: delegated writer.
 
 ## Acceptance criteria
 
@@ -114,7 +118,16 @@ _Updated after each task with commit id and checks._
   exhausted returns the last draft with `final_verdict: needs_iteration`; ACB bypasses both caches.
   `POST /estimate/acb`; `types.ts` mirrors `AcbResponse` (no client function / UI). Checks: see commit.
   Pending: architecture diagram (`docs/architecture/estimation-flow`) not updated for ACB.
+  Commit `576ef5f`.
+- T4 done (route: delegated writer). `services/audience.py` (pure regex, EN/ES; precedence documented in the
+  module: explicit > compliance terms > executive terms > >=2 dev keywords > session team size <=2 > PM
+  signals > default) + trailing `estimation/v3/audience.j2` (after `language.j2`; absent for default, byte-identical
+  test). Cache decision: the resolved tier is carried on `EstimationRequest.audience` and added to the exact key
+  and the semantic bucket only when non-default (existing keys unchanged); no cache bypass. Optional `audience`
+  on JSON body + session form (invalid -> 422); responses (`/estimate`, `/estimate/acb`, session turn, stream
+  `done`) carry `audience` + `audience_rule`; session detail `last_audience`/`last_audience_rule`; `types.ts`
+  mirrored. No new settings. Pending: diagram still lacks ACB/compression/tier (T5).
 
 ## Next step
 
-T4.
+T5.

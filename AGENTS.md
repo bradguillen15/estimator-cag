@@ -25,6 +25,9 @@ The interactive diagram of this flow, with file/line sources per node, is
 `Boss` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
 (max `BOSS_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
 
+Every path first resolves the audience tier (`services/audience.py`) and carries it on the request: a
+non-default tier adds the trailing `audience.j2` block and enters the exact cache key and the semantic bucket.
+
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
@@ -84,6 +87,7 @@ app/
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
     ├── sessions.py             # Session state: sliding-window history (returns evicted turns; holds anchors + summary) + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── audience.py             # Audience tier: pure regex resolver (explicit > compliance > executive > dev keywords > small team > pm) -> (tier, rule); no LLM
     ├── history_compression.py  # Evicted turns: anchor regex (EN/ES) keeps commitments verbatim, the rest is folded by the summarizer
     ├── critic.py               # Actor-Critic-Boss: LLM audit (prompts/critic/<version>/) -> `CriticFeedback`; any failure = accept (logged)
     ├── boss.py                 # Actor-Critic-Boss: pure loop (no SDK/HTTP); accept / iterate with feedback / reject / budget exhausted

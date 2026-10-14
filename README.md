@@ -72,7 +72,7 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | Method | Path | Response |
 |--------|------|----------|
 | `GET` | `/health` | `{"status": "ok"}` |
-| `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`) |
+| `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`, `audience`, `audience_rule`) |
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
 | `POST` | `/api/v1/estimate/acb` | `AcbResponse` (`estimation`, `prompt_version`, `final_verdict`, `iterations`): Actor-Critic-Boss, see below |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
@@ -141,6 +141,16 @@ Critic failure (provider error, invalid JSON) accepts the draft and is logged. *
 2 x `BOSS_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
 critic). `CRITIC_MODEL` (optional `<provider>/<model>`, e.g. a cheaper one) overrides the model;
 empty reuses `LLM_MODELS`. Both caches are bypassed. No UI yet.
+
+**Audience tier**: every estimate endpoint (and the session turn form) accepts an optional `audience`
+(`executive` | `pm` | `developer` | `default`; anything else is a **422**). Without it, a pure regex
+resolver (`services/audience.py`, no LLM, English and Spanish) infers it from the description in this
+order: explicit value, NDA/regulatory/board/investor terms (executive), executive vocabulary, two or
+more developer keywords (developer), a session team size of 2 or fewer (developer), delivery
+vocabulary such as sprint or roadmap (pm), otherwise `default`. A non-default tier adds one trailing
+`audience.j2` block (the `default` prompt is byte-identical to before) and is part of both cache
+keys, so two tiers never share an answer. Responses carry `audience` and `audience_rule` (which rule
+fired); `GET /sessions/{id}` reports `last_audience` and `last_audience_rule`.
 
 **History** is a sliding window of the last `SESSION_MAX_TURNS` turns (default 6; a turn is a
 user message plus the answer). Each call sends the system prompt, rebuilt with the current

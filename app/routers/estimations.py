@@ -43,16 +43,26 @@ def get_prompt_context(service: Service, prompt_version: PromptVersion) -> Promp
 def create_estimate(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> EstimationResponse:
     metrics = GenerationMetrics(model=service.model)
     text = service.generate(body, prompt_version, metrics=metrics)
-    return EstimationResponse(text=text, prompt_version=prompt_version, cache_hit=metrics.cache_hit)
+    audience = service.resolve_audience(body)
+    return EstimationResponse(
+        text=text,
+        prompt_version=prompt_version,
+        cache_hit=metrics.cache_hit,
+        audience=audience.audience,
+        audience_rule=audience.rule,
+    )
 
 
 @router.post("/estimate/acb", response_model=AcbResponse)
 def create_estimate_acb(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> AcbResponse:
     """Actor-Critic-Boss: up to 2 x BOSS_MAX_ITERATIONS LLM calls, caches bypassed."""
     result = service.generate_with_critic(body, prompt_version)
+    audience = service.resolve_audience(body)
     return AcbResponse(
         estimation=result.estimate,
         prompt_version=prompt_version,
+        audience=audience.audience,
+        audience_rule=audience.rule,
         final_verdict=result.final_verdict,
         iterations=result.iterations,
     )
@@ -66,6 +76,7 @@ async def create_estimate_stream(
     prompt_version: PromptVersion,
 ) -> AsyncIterator[ServerSentEvent]:
     metrics = GenerationMetrics(model=service.model)
+    audience = service.resolve_audience(body)
 
     # The HTTP status is already 200 once streaming starts, so failures travel as an `error` event.
     stream = None
@@ -85,6 +96,8 @@ async def create_estimate_stream(
                     "latency_seconds": metrics.latency_seconds,
                     "cache_hit": metrics.cache_hit,
                     "prompt_version": prompt_version,
+                    "audience": audience.audience.value,
+                    "audience_rule": audience.rule,
                 },
                 event="done",
             )

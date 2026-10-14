@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFo
 
 from app.exceptions import PromptTemplateError
 from app.schemas.critic import CriticIssue
-from app.schemas.estimations import EstimationRequest
+from app.schemas.estimations import Audience, EstimationRequest
 from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
 
 _PROMPTS_ROOT = Path(__file__).resolve().parent
@@ -54,16 +54,20 @@ def _render(version: str, template: str, **context: object) -> str:
 
 
 @lru_cache
-def _system_prompt(version: str, detail_level: str, output_format: str, language: str) -> str:
+def _system_prompt(
+    version: str, detail_level: str, output_format: str, language: str, audience: str = ""
+) -> str:
     # Never includes the description, so there are only a few variants per version. Rules and
     # examples come first and are identical for every request (the provider caches that prefix);
-    # only the short trailing blocks (request.j2, language.j2) depend on these arguments.
+    # only the short trailing blocks (request.j2, language.j2, audience.j2) depend on these arguments.
+    # ``audience`` is "" for the default tier: the variable is then not passed at all.
     return _render(
         version,
         "system.j2",
         detail_level=detail_level,
         output_format=output_format,
         language=language,
+        **({"audience": audience} if audience else {}),
     )
 
 
@@ -79,6 +83,7 @@ def _system_prompt_with_metadata(
     language: str,
     metadata: ProjectMetadata,
     history_memory: HistoryMemory | None = None,
+    audience: str = "",
 ) -> str:
     # Not cached: the metadata changes on every session turn. The trailing blocks come last, so the
     # provider still caches the same static prefix as ``_system_prompt``. An empty memory is not
@@ -86,6 +91,8 @@ def _system_prompt_with_metadata(
     context: dict[str, object] = {}
     if history_memory is not None and not history_memory.is_empty():
         context["history_memory"] = _neutralize(history_memory)
+    if audience:
+        context["audience"] = audience
     return _render(
         version,
         "system.j2",
@@ -116,7 +123,12 @@ _FEEDBACK_TAG_RE = re.compile(r"<(/?)\s*(critic_feedback|issue)\b", re.IGNORECAS
 
 
 def _system_prompt_with_feedback(
-    version: str, detail_level: str, output_format: str, language: str, issues: Sequence[CriticIssue]
+    version: str,
+    detail_level: str,
+    output_format: str,
+    language: str,
+    issues: Sequence[CriticIssue],
+    audience: str = "",
 ) -> str:
     # Not cached: the issues differ on every re-attempt. The block is trailing (prefix unchanged).
     # Messages come from an LLM that read user text, so tags that would close the block are defused.
@@ -128,6 +140,7 @@ def _system_prompt_with_feedback(
         output_format=output_format,
         language=language,
         critic_feedback=cleaned,
+        **({"audience": audience} if audience else {}),
     )
 
 
@@ -147,7 +160,9 @@ def render_estimation_prompt(
     ``history_memory`` (summary + anchors of the turns that left the window) adds one more trailing
     block, only when non-empty and only together with ``project_metadata``. ``critic_feedback``
     (the Critic's issues, stateless Actor-Critic-Boss re-attempts only) adds a last trailing block,
-    only when non-empty and without ``project_metadata``. Versions whose ``system.j2`` predates a
+    only when non-empty and without ``project_metadata``. ``request.audience`` (the resolved tier;
+    see ``services/audience.py``) adds an ``audience`` block after the language one, unless it is
+    ``default`` or unset. Versions whose ``system.j2`` predates a
     block ignore it.
     """
     user = _render(
@@ -159,11 +174,13 @@ def render_estimation_prompt(
         output_format=request.output_format.value,
     )
     parameters = (version, request.detail_level.value, request.output_format.value, request.language.value)
+    # The default tier adds no block, so its prompt stays identical to one that never heard of tiers.
+    audience = request.audience.value if request.audience not in (None, Audience.DEFAULT) else ""
     if project_metadata is None:
         if critic_feedback:
-            return _system_prompt_with_feedback(*parameters, critic_feedback), user
-        return _system_prompt(*parameters), user
-    return _system_prompt_with_metadata(*parameters, project_metadata, history_memory), user
+            return _system_prompt_with_feedback(*parameters, critic_feedback, audience), user
+        return _system_prompt(*parameters, audience), user
+    return _system_prompt_with_metadata(*parameters, project_metadata, history_memory, audience), user
 
 
 # Version of the project-metadata extraction prompt (app/prompts/metadata/<version>/).

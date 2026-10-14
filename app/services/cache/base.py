@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.schemas.estimations import EstimationRequest
+from app.schemas.estimations import Audience, EstimationRequest
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,8 @@ class NoOpCache:
 def make_cache_key(request: EstimationRequest, prompt_version: str, models: Sequence[str]) -> str:
     """SHA-256 over everything that shapes the answer.
 
-    ``request.description`` must be the sanitized one (after PII redaction), so equal requests that
+    ``request.audience`` must be the *resolved* tier (the service sets it), because the tier changes
+    the answer. ``request.description`` must be the sanitized one (after PII redaction), so equal requests that
     only differ in redacted data share an entry and raw PII never reaches the cache key material.
     """
     payload = json.dumps(
@@ -50,6 +51,8 @@ def make_cache_key(request: EstimationRequest, prompt_version: str, models: Sequ
             "detail_level": request.detail_level.value,
             "output_format": request.output_format.value,
             "language": request.language.value,
+            # Only for a non-default tier, so existing keys stay valid and the default is unchanged.
+            **({"audience": request.audience.value} if request.audience not in (None, Audience.DEFAULT) else {}),
         },
         sort_keys=True,
         ensure_ascii=False,

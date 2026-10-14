@@ -9,6 +9,10 @@ cover, so a hit could replay an answer built on another conversation. After the 
 is added to the history window, turns that overflow it are compressed (anchors kept verbatim,
 the rest folded into a summary) and the metadata is updated for the next turn.
 
+Every path resolves the audience tier first (``services/audience.py``) and carries it on the
+request, so the prompt block and both cache keys see the same tier. A non-default tier changes the
+exact key and the semantic bucket, so two tiers never share an answer.
+
 ``generate_with_critic`` (Actor-Critic-Boss) also skips both caches and delegates the loop to ``Boss``.
 """
 
@@ -20,6 +24,7 @@ import structlog
 
 from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
+from app.services.audience import AudienceResolution, resolve_audience
 from app.services.boss import Boss, BossResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
@@ -91,6 +96,16 @@ class EstimationService:
         """CAG examples the model receives in the system prompt (Markdown)."""
         return render_estimation_examples(prompt_version)
 
+    @staticmethod
+    def resolve_audience(request: EstimationRequest, session: Session | None = None) -> AudienceResolution:
+        """Tier and rule for a prepared request (pure regexes, so cheap to call more than once)."""
+        return resolve_audience(request.description, request.audience, session.metadata if session else None)
+
+    @classmethod
+    def _with_audience(cls, request: EstimationRequest, session: Session | None = None) -> EstimationRequest:
+        """The request carrying the *resolved* tier: prompts and both cache keys read it from there."""
+        return request.model_copy(update={"audience": cls.resolve_audience(request, session).audience})
+
     def prepare(self, request: EstimationRequest) -> EstimationRequest:
         """Runs the input guardrails; returns the request with the sanitized description.
 
@@ -128,6 +143,7 @@ class EstimationService:
         metrics: GenerationMetrics | None = None,
     ) -> str:
         """Returns the estimate; ``metrics.cache_hit`` is set when it came from a cache."""
+        request = self._with_audience(request)
         key = make_cache_key(request, prompt_version, self._cache_models)
         cached = self._cache.get(key)
         if cached is not None:
@@ -155,6 +171,8 @@ class EstimationService:
         output check runs on the final answer only (logged, as on ``generate``).
         """
 
+        request = self._with_audience(request)
+
         def actor(feedback: CriticFeedback | None) -> str:
             issues = feedback.issues if feedback else None
             system, user = render_estimation_prompt(request, prompt_version, critic_feedback=issues)
@@ -176,7 +194,9 @@ class EstimationService:
         of the turns that left the window. No caching (see the module docstring). A failed metadata
         extraction or summary keeps the old facts / summary.
         """
-        request = turn.request
+        resolution = self.resolve_audience(turn.request, session)
+        request = turn.request.model_copy(update={"audience": resolution.audience})
+        session.last_audience, session.last_audience_rule = resolution.audience, resolution.rule
         system, user = render_estimation_prompt(
             request, prompt_version, project_metadata=session.metadata, history_memory=session.history.memory
         )
@@ -210,6 +230,7 @@ class EstimationService:
         prompt_version: str = PROMPT_VERSION,
     ) -> Iterator[str]:
         started_at = perf_counter()
+        request = self._with_audience(request)
         key = make_cache_key(request, prompt_version, self._cache_models)
         cached = self._cache.get(key)
         semantic = SemanticLookup(bucket="")

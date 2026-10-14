@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.estimations import EstimationResponse
+from app.schemas.estimations import Audience, EstimationResponse
 
 
 class SessionCreatedResponse(BaseModel):
@@ -83,5 +83,7 @@ class SessionDetail(BaseModel):
     turns: list[SessionTurnView] = Field(default_factory=list, description="Oldest first.")
     anchors_count: int = Field(default=0, description="Turns kept verbatim after leaving the window (commitments).")
     summary_chars: int = Field(default=0, description="Length of the running summary of the folded turns.")
+    last_audience: Audience | None = Field(default=None, description="Tier of the latest turn (none before the first).")
+    last_audience_rule: str | None = Field(default=None, description="Resolver rule that chose it.")
     created_at: datetime
     updated_at: datetime

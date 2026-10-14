@@ -230,7 +230,7 @@ def test_acb_route_iterates_and_returns_the_trail(acb_client: tuple[TestClient, 
     response = client.post("/api/v1/estimate/acb", json=VALID_REQUEST)
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"estimation", "prompt_version", "final_verdict", "iterations"}
+    assert set(body) == {"estimation", "prompt_version", "audience", "audience_rule", "final_verdict", "iterations"}
     assert body["final_verdict"] == "accept"
     assert body["prompt_version"] == "v3"
     assert [(i["attempt"], i["verdict"]) for i in body["iterations"]] == [(1, "needs_iteration"), (2, "accept")]

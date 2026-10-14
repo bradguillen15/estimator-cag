@@ -5,6 +5,8 @@ export type DetailLevel = 'summary' | 'medium' | 'detailed'
 export type OutputFormat = 'phases_table' | 'line_items' | 'narrative'
 /** Language the model answers in. The API falls back to 'es' for anything else. */
 export type ResponseLanguage = 'es' | 'en'
+/** Who reads the estimate. Optional on requests (the API infers it); no UI control yet. */
+export type Audience = 'executive' | 'pm' | 'developer' | 'default'
 
 /** What the form collects; language (UI + model response) comes from the sidebar. */
 export interface EstimationInput {
@@ -16,6 +18,7 @@ export interface EstimationInput {
 
 export interface EstimationRequest extends EstimationInput {
   language: ResponseLanguage
+  audience?: Audience
 }
 
 export interface EstimationResponse {
@@ -23,6 +26,9 @@ export interface EstimationResponse {
   prompt_version: string
   /** True when the answer was served from the response cache (no LLM call). */
   cache_hit: boolean
+  /** Tier the prompt was framed for, and the resolver rule that chose it. */
+  audience: Audience
+  audience_rule: string
 }
 
 export type CriticVerdict = 'accept' | 'needs_iteration' | 'reject'
@@ -50,6 +56,8 @@ export interface AcbIteration {
 export interface AcbResponse {
   estimation: string
   prompt_version: string
+  audience: Audience
+  audience_rule: string
   /** needs_iteration here means the iteration budget ran out with issues still open. */
   final_verdict: CriticVerdict
   iterations: AcbIteration[]
@@ -117,6 +125,9 @@ export interface SessionDetail {
   anchors_count: number
   /** Length of the running summary of the turns folded out of the window. */
   summary_chars: number
+  /** Tier and resolver rule of the latest turn; null before the first one. */
+  last_audience: Audience | null
+  last_audience_rule: string | null
   created_at: string
   updated_at: string
 }

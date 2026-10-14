@@ -9,6 +9,7 @@ from app.dependencies import (
     get_session,
     get_session_store,
 )
+from app.schemas.estimations import Audience
 from app.schemas.sessions import (
     SessionCreatedResponse,
     SessionDetail,
@@ -56,6 +57,8 @@ def get_session_detail(session: CurrentSession) -> SessionDetail:
         history_turns=len(session.history),
         anchors_count=len(session.history.anchors),
         summary_chars=len(session.history.summary),
+        last_audience=session.last_audience,
+        last_audience_rule=session.last_audience_rule,
         turns=[
             SessionTurnView(
                 description=t.description,
@@ -86,4 +89,6 @@ def create_session_estimate(
         prompt_version=prompt_version,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        audience=session.last_audience or Audience.DEFAULT,
+        audience_rule=session.last_audience_rule or "default",
     )

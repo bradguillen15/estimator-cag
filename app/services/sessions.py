@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from app.exceptions import SessionNotFoundError
+from app.schemas.estimations import Audience
 from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
 
 Role = Literal["user", "assistant"]
@@ -122,6 +123,8 @@ class Session:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     turns: list[TurnRecord] = field(default_factory=list)
+    last_audience: Audience | None = None  # tier + rule of the latest turn
+    last_audience_rule: str | None = None
 
     def record_turn(
         self, user_content: str, assistant_content: str, display: TurnRecord | None = None
