@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "076b09afea88640b1fe0b6a5c55b0413784475d1"
+      "revision": "8cfae9b92221e719d6adf5f2e3f15db24a63bacd"
     }
   },
   "components": [
@@ -57,8 +57,8 @@
       "sources": [
         {
           "path": "app/routers/sessions.py",
-          "line": 32,
-          "end_line": 87
+          "line": 33,
+          "end_line": 94
         },
         {
           "path": "app/main.py",
@@ -83,8 +83,8 @@
       "sources": [
         {
           "path": "app/routers/estimations.py",
-          "line": 40,
-          "end_line": 45
+          "line": 42,
+          "end_line": 68
         }
       ]
     },
@@ -92,7 +92,7 @@
       "id": "router",
       "type": "backend",
       "label": "Estimations router",
-      "sublabel": "/api/v1/estimate[/stream]",
+      "sublabel": "/api/v1/estimate[/stream|/acb]",
       "tag": "JSON or SSE",
       "pos": [
         540,
@@ -105,8 +105,8 @@
       "sources": [
         {
           "path": "app/routers/estimations.py",
-          "line": 40,
-          "end_line": 85
+          "line": 42,
+          "end_line": 112
         },
         {
           "path": "app/main.py",
@@ -132,13 +132,13 @@
       "sources": [
         {
           "path": "app/dependencies.py",
-          "line": 88,
-          "end_line": 133
+          "line": 105,
+          "end_line": 154
         },
         {
           "path": "app/services/guardrails/input.py",
           "line": 149,
-          "end_line": 161
+          "end_line": 162
         }
       ]
     },
@@ -160,12 +160,12 @@
         {
           "path": "app/services/attachments.py",
           "line": 41,
-          "end_line": 89
+          "end_line": 94
         },
         {
           "path": "app/services/estimation_service.py",
-          "line": 89,
-          "end_line": 108
+          "line": 118,
+          "end_line": 137
         }
       ]
     },
@@ -186,13 +186,18 @@
       "sources": [
         {
           "path": "app/services/estimation_service.py",
-          "line": 110,
-          "end_line": 134
+          "line": 109,
+          "end_line": 137
         },
         {
           "path": "app/services/estimation_service.py",
-          "line": 136,
-          "end_line": 169
+          "line": 139,
+          "end_line": 164
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 185,
+          "end_line": 224
         }
       ]
     },
@@ -218,8 +223,8 @@
         },
         {
           "path": "app/services/cache/semantic.py",
-          "line": 94,
-          "end_line": 155
+          "line": 99,
+          "end_line": 175
         }
       ]
     },
@@ -228,7 +233,7 @@
       "type": "database",
       "label": "CAG prompt",
       "sublabel": "Jinja2 rules + examples",
-      "tag": "versioned (v3)",
+      "tag": "versioned (v3), trailing blocks",
       "pos": [
         820,
         400
@@ -240,13 +245,13 @@
       "sources": [
         {
           "path": "app/prompts/loader.py",
-          "line": 87,
-          "end_line": 111
+          "line": 147,
+          "end_line": 183
         },
         {
           "path": "app/prompts/estimation/v3/system.j2",
-          "line": 72,
-          "end_line": 82
+          "line": 74,
+          "end_line": 94
         },
         {
           "path": "app/prompts/estimation/v3/project_metadata.j2",
@@ -262,7 +267,7 @@
       "sublabel": "history window + facts",
       "tag": "in-process memory",
       "pos": [
-        1130,
+        1280,
         20
       ],
       "size": [
@@ -272,18 +277,18 @@
       "sources": [
         {
           "path": "app/services/sessions.py",
-          "line": 32,
-          "end_line": 104
+          "line": 34,
+          "end_line": 99
         },
         {
           "path": "app/services/sessions.py",
-          "line": 107,
-          "end_line": 138
+          "line": 118,
+          "end_line": 141
         },
         {
           "path": "app/dependencies.py",
-          "line": 57,
-          "end_line": 65
+          "line": 74,
+          "end_line": 77
         }
       ]
     },
@@ -294,7 +299,7 @@
       "sublabel": "ordered LLM_MODELS",
       "tag": "fallback on failure",
       "pos": [
-        1130,
+        1280,
         200
       ],
       "size": [
@@ -316,7 +321,7 @@
       "sublabel": "2nd LLM call per turn",
       "tag": "keeps old facts on failure",
       "pos": [
-        1130,
+        1280,
         400
       ],
       "size": [
@@ -327,12 +332,12 @@
         {
           "path": "app/services/metadata_extractor.py",
           "line": 37,
-          "end_line": 75
+          "end_line": 57
         },
         {
           "path": "app/prompts/loader.py",
-          "line": 114,
-          "end_line": 145
+          "line": 198,
+          "end_line": 217
         }
       ]
     },
@@ -342,7 +347,7 @@
       "label": "Anthropic API",
       "sublabel": "primary model",
       "pos": [
-        1400,
+        1550,
         200
       ],
       "size": [
@@ -368,7 +373,7 @@
       "label": "OpenAI API",
       "sublabel": "fallback model",
       "pos": [
-        1400,
+        1550,
         400
       ],
       "size": [
@@ -380,6 +385,87 @@
           "path": "app/services/llm/factory.py",
           "line": 17,
           "end_line": 21
+        }
+      ]
+    },
+    {
+      "id": "audience",
+      "type": "backend",
+      "label": "Audience tier",
+      "sublabel": "regex rules, no LLM",
+      "tag": "adds a trailing prompt block",
+      "pos": [
+        540,
+        590
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/audience.py",
+          "line": 65,
+          "end_line": 99
+        }
+      ]
+    },
+    {
+      "id": "acb",
+      "type": "backend",
+      "label": "Actor-Critic-Boss",
+      "sublabel": "Boss loop + Critic audit",
+      "tag": "/estimate/acb, caches bypassed",
+      "pos": [
+        1060,
+        590
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/boss.py",
+          "line": 39,
+          "end_line": 58
+        },
+        {
+          "path": "app/services/critic.py",
+          "line": 31,
+          "end_line": 53
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 166,
+          "end_line": 183
+        }
+      ]
+    },
+    {
+      "id": "compression",
+      "type": "backend",
+      "label": "History compression",
+      "sublabel": "anchors + summarizer",
+      "tag": "after each session turn",
+      "pos": [
+        1550,
+        20
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/history_compression.py",
+          "line": 91,
+          "end_line": 117
+        },
+        {
+          "path": "app/services/summarizer.py",
+          "line": 26,
+          "end_line": 49
         }
       ]
     }
@@ -488,6 +574,46 @@
       "to": "openai",
       "label": "on failure",
       "variant": "dashed"
+    },
+    {
+      "id": "service-to-audience",
+      "from": "service",
+      "to": "audience",
+      "label": "resolve tier",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "service-to-acb",
+      "from": "service",
+      "to": "acb",
+      "label": "critic loop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "acb-to-llm",
+      "from": "acb",
+      "to": "llm",
+      "label": "critic audit",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "store-to-compression",
+      "from": "store",
+      "to": "compression",
+      "label": "evicted turns",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "compression-to-llm",
+      "from": "compression",
+      "to": "llm",
+      "label": "fold into summary",
+      "fromSide": "bottom",
+      "toSide": "top"
     }
   ],
   "cards": [
@@ -496,6 +622,7 @@
       "title": "Stateless request",
       "items": [
         "Guardrails run before the handler, so a rejection is a 400, never an SSE error",
+        "The audience tier is resolved first and joins both cache keys, so tiers never share an answer",
         "A cache hit skips the prompt and the LLM",
         "Only answers that pass the output check are cached"
       ]
@@ -506,7 +633,24 @@
       "items": [
         "The UI sends every turn through a session; attachments become text before the guardrails",
         "No cache: the prompt also carries the history window and the project facts",
-        "After the answer, the turn is recorded and a second LLM call refreshes the facts"
+        "After the answer, the turn is recorded, overflowing turns are compressed, and a second LLM call refreshes the facts"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Actor-Critic-Boss",
+      "items": [
+        "POST /estimate/acb: the Actor drafts, the Critic (CRITIC_MODEL or the main chain) audits, the Boss re-calls the Actor with the issues",
+        "Stops on accept or reject, or after BOSS_MAX_ITERATIONS attempts; both caches are bypassed",
+        "A failed review accepts the draft instead of failing the request"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "History compression",
+      "items": [
+        "Turns that leave the window are kept verbatim as anchors (NDA, frozen budget, deadline...) or folded into a running summary",
+        "A failed summary keeps the previous one; anchors and summary render as a trailing prompt block"
       ]
     },
     {
@@ -514,7 +658,7 @@
       "title": "CAG prompt",
       "items": [
         "Static rules + few-shot examples first, so the provider can cache them",
-        "Known project facts go in a trailing block; the description only goes in the user message"
+        "Every variable part is a trailing block: response language, audience tier, project facts, history memory, critic feedback"
       ]
     },
     {
