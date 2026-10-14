@@ -80,6 +80,7 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
 | `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `turns`: what was typed + attachment names + estimate per turn, oldest first, capped by the history window); **404** if unknown |
 | `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
+| `POST` | `/api/v1/sessions/{session_id}/estimate/acb` | `SessionAcbResponse` (session turn fields + `final_verdict`, `iterations`): same form as the session estimate, with Actor-Critic-Boss on the session prompt |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/estimate \
@@ -141,6 +142,12 @@ Critic failure (provider error, invalid JSON) accepts the draft and is logged. *
 2 x `BOSS_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
 critic). `CRITIC_MODEL` (optional `<provider>/<model>`, e.g. a cheaper one) overrides the model;
 empty reuses `LLM_MODELS`. Both caches are bypassed. No UI yet.
+
+`POST /sessions/{id}/estimate/acb` runs the same Boss on the session conversation (memory, metadata,
+audience and history window in the actor prompt; the `critic_feedback` block is added on retries).
+Only the final estimate is recorded as the turn (history, compression, metadata, `final_verdict` on
+the turn view); drafts are discarded. Same cost: up to 2 x `BOSS_MAX_ITERATIONS` calls plus the
+usual per-turn metadata/summary calls.
 
 **Audience tier**: every estimate endpoint (and the session turn form) accepts an optional `audience`
 (`executive` | `pm` | `developer` | `default`; anything else is a **422**). Without it, a pure regex

@@ -24,6 +24,9 @@ The interactive diagram of this flow, with file/line sources per node, is
 `POST /api/v1/estimate/acb` runs the same entry (guardrails) then `EstimationService.generate_with_critic`:
 `Boss` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
 (max `BOSS_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
+`POST /api/v1/sessions/{id}/estimate/acb` reuses the same `Boss` with a session actor
+(`generate_for_session_with_critic`): the loop runs on the session prompt and only the final estimate is
+recorded, through the same `_record_session_turn` as a normal turn (verdict kept on the `TurnRecord`).
 
 Every path first resolves the audience tier (`services/audience.py`) and carries it on the request: a
 non-default tier adds the trailing `audience.j2` block and enters the exact cache key and the semantic bucket.

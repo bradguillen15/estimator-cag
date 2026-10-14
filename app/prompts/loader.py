@@ -84,6 +84,7 @@ def _system_prompt_with_metadata(
     metadata: ProjectMetadata,
     history_memory: HistoryMemory | None = None,
     audience: str = "",
+    critic_feedback: Sequence[CriticIssue] | None = None,
 ) -> str:
     # Not cached: the metadata changes on every session turn. The trailing blocks come last, so the
     # provider still caches the same static prefix as ``_system_prompt``. An empty memory is not
@@ -93,6 +94,8 @@ def _system_prompt_with_metadata(
         context["history_memory"] = _neutralize(history_memory)
     if audience:
         context["audience"] = audience
+    if critic_feedback:
+        context["critic_feedback"] = _clean_feedback(critic_feedback)
     return _render(
         version,
         "system.j2",
@@ -122,6 +125,11 @@ def _neutralize(memory: HistoryMemory) -> HistoryMemory:
 _FEEDBACK_TAG_RE = re.compile(r"<(/?)\s*(critic_feedback|issue)\b", re.IGNORECASE)
 
 
+def _clean_feedback(issues: Sequence[CriticIssue]) -> list[CriticIssue]:
+    # Messages come from an LLM that read user text, so tags that would close the block are defused.
+    return [issue.model_copy(update={"message": _FEEDBACK_TAG_RE.sub(r"<\1 \2", issue.message)}) for issue in issues]
+
+
 def _system_prompt_with_feedback(
     version: str,
     detail_level: str,
@@ -131,8 +139,7 @@ def _system_prompt_with_feedback(
     audience: str = "",
 ) -> str:
     # Not cached: the issues differ on every re-attempt. The block is trailing (prefix unchanged).
-    # Messages come from an LLM that read user text, so tags that would close the block are defused.
-    cleaned = [issue.model_copy(update={"message": _FEEDBACK_TAG_RE.sub(r"<\1 \2", issue.message)}) for issue in issues]
+    cleaned = _clean_feedback(issues)
     return _render(
         version,
         "system.j2",
@@ -159,8 +166,8 @@ def render_estimation_prompt(
     system prompt then closes with a ``<project_metadata>`` block (empty tags on the first turn).
     ``history_memory`` (summary + anchors of the turns that left the window) adds one more trailing
     block, only when non-empty and only together with ``project_metadata``. ``critic_feedback``
-    (the Critic's issues, stateless Actor-Critic-Boss re-attempts only) adds a last trailing block,
-    only when non-empty and without ``project_metadata``. ``request.audience`` (the resolved tier;
+    (the Critic's issues, Actor-Critic-Boss re-attempts, stateless or session) adds a last trailing
+    block, only when non-empty. ``request.audience`` (the resolved tier;
     see ``services/audience.py``) adds an ``audience`` block after the language one, unless it is
     ``default`` or unset. Versions whose ``system.j2`` predates a
     block ignore it.
@@ -180,7 +187,10 @@ def render_estimation_prompt(
         if critic_feedback:
             return _system_prompt_with_feedback(*parameters, critic_feedback, audience), user
         return _system_prompt(*parameters, audience), user
-    return _system_prompt_with_metadata(*parameters, project_metadata, history_memory, audience), user
+    return (
+        _system_prompt_with_metadata(*parameters, project_metadata, history_memory, audience, critic_feedback),
+        user,
+    )
 
 
 # Version of the project-metadata extraction prompt (app/prompts/metadata/<version>/).

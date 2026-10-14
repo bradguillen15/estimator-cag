@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
+from app.schemas.critic import CriticVerdict
 from app.exceptions import SessionNotFoundError
 from app.schemas.estimations import Audience
 from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
@@ -112,6 +113,7 @@ class TurnRecord:
     estimate: str
     prompt_version: str
     cache_hit: bool = False  # session turns skip the response caches
+    final_verdict: CriticVerdict | None = None  # set only by Actor-Critic-Boss turns
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 

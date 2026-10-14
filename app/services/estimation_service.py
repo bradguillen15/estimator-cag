@@ -29,7 +29,7 @@ from app.services.boss import Boss, BossResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
 from app.services.attachments import Attachment, build_description, display_name
-from app.schemas.critic import CriticFeedback
+from app.schemas.critic import CriticFeedback, CriticIssue, CriticVerdict
 from app.services.critic import Critic
 from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
@@ -194,16 +194,65 @@ class EstimationService:
         of the turns that left the window. No caching (see the module docstring). A failed metadata
         extraction or summary keeps the old facts / summary.
         """
-        resolution = self.resolve_audience(turn.request, session)
-        request = turn.request.model_copy(update={"audience": resolution.audience})
-        session.last_audience, session.last_audience_rule = resolution.audience, resolution.rule
-        system, user = render_estimation_prompt(
-            request, prompt_version, project_metadata=session.metadata, history_memory=session.history.memory
-        )
-        messages = [*session.history.to_messages_list(system), {"role": "user", "content": user}]
-        text = self._provider.complete_messages(messages)
-        self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
+        request = self._begin_session_turn(turn, session)
+        text = self._provider.complete_messages(self._session_messages(request, session, prompt_version))
+        self._record_session_turn(turn, request, session, text, prompt_version)
+        return text
 
+    def generate_for_session_with_critic(
+        self,
+        turn: SessionTurn,
+        session: Session,
+        prompt_version: str = PROMPT_VERSION,
+    ) -> BossResult:
+        """Actor-Critic-Boss on a session turn; only the final estimate is recorded, as a normal turn.
+
+        The actor sends what ``generate_for_session`` would (current memory, history window and
+        message), plus the ``critic_feedback`` block on retries. The session is not touched until the
+        loop ends, so every attempt sees the same history. Caches are bypassed, as for a session turn.
+        """
+        request = self._begin_session_turn(turn, session)
+
+        def actor(feedback: CriticFeedback | None) -> str:
+            issues = feedback.issues if feedback else None
+            return self._provider.complete_messages(self._session_messages(request, session, prompt_version, issues))
+
+        result = self._boss.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        self._record_session_turn(turn, request, session, result.estimate, prompt_version, result.final_verdict)
+        return result
+
+    def _begin_session_turn(self, turn: SessionTurn, session: Session) -> EstimationRequest:
+        """The turn's request carrying the resolved tier, which is also stored on the session."""
+        resolution = self.resolve_audience(turn.request, session)
+        session.last_audience, session.last_audience_rule = resolution.audience, resolution.rule
+        return turn.request.model_copy(update={"audience": resolution.audience})
+
+    @staticmethod
+    def _session_messages(
+        request: EstimationRequest,
+        session: Session,
+        prompt_version: str,
+        critic_feedback: Sequence[CriticIssue] | None = None,
+    ) -> list[dict[str, str]]:
+        system, user = render_estimation_prompt(
+            request,
+            prompt_version,
+            project_metadata=session.metadata,
+            history_memory=session.history.memory,
+            critic_feedback=critic_feedback,
+        )
+        return [*session.history.to_messages_list(system), {"role": "user", "content": user}]
+
+    def _record_session_turn(
+        self,
+        turn: SessionTurn,
+        request: EstimationRequest,
+        session: Session,
+        text: str,
+        prompt_version: str,
+        final_verdict: CriticVerdict | None = None,
+    ) -> None:
+        self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
         _, history_user = render_estimation_prompt(
             request.model_copy(update={"description": turn.history_description}), prompt_version
         )
@@ -215,13 +264,13 @@ class EstimationService:
                 attachment_names=turn.attachment_names,
                 estimate=text,
                 prompt_version=prompt_version,
+                final_verdict=final_verdict,
             ),
         )
         self._history_compressor.compress(session.history, evicted, request.language.value)
         session.metadata = self._metadata_extractor.update(
             session.metadata, request.description, text, request.language.value
         )
-        return text
 
     def generate_stream(
         self,

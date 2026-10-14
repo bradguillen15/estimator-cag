@@ -76,10 +76,17 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   session estimates; badge showing the resolved audience + rule on each result; session view shows
   anchors count / summary size / last audience. Spanish UI copy, client.ts only for HTTP, Vitest +
   RTL tests. Commit `feat(web): ...`. Route: delegated writer.
-- [ ] T7 — Frontend: Actor-Critic-Boss. `estimateAcb` in `client.ts`, a "revisión con crítico"
-  toggle for stateless estimates (session turns have no ACB endpoint → hidden/disabled there),
-  loading state for the non-streaming call, result with final verdict + iteration trail (attempt,
-  verdict, issues by severity). Tests. Commit `feat(web): ...`. Route: delegated writer.
+- [x] T7a — API: session Actor-Critic-Boss. Revised by user decision (option 1): the UI only uses
+  session turns (`client.ts` has no stateless estimate call), so a stateless-only toggle had no
+  home. New `POST /api/v1/sessions/{id}/estimate/acb` (same multipart form + guardrails as the
+  session estimate) running the Boss loop on the session prompt (history window, anchors/summary,
+  metadata, audience) and then recording the turn exactly like a normal session turn (history,
+  compression, metadata extraction, `TurnRecord`), returning the session turn fields + final
+  verdict + iterations. Commit `feat(sessions): ...`. Route: delegated writer.
+- [ ] T7b — Frontend: Actor-Critic-Boss. `createSessionAcbEstimate` in `client.ts`, a
+  "Revisión con crítico" toggle in the session composer, loading state for the non-streaming call,
+  result with final verdict + iteration trail (attempt, verdict, issues by severity). Tests.
+  Commit `feat(web): ...`. Route: delegated writer.
 
 ## Acceptance criteria
 
@@ -146,6 +153,12 @@ _Updated after each task with commit id and checks._
   session-memory block in the sidebar (anchors, summary chars when >0, last audience) refreshes after each turn via a
   best-effort `getSession` (no polling). Rebuilt threads show the badge only on the last turn. Checks: lint, build,
   `pnpm test:web` (105), `uv run pytest` green. Commit: see git log.
+- T7a done (route: delegated writer). `Boss.run(actor, critic)` was already callable-based, so both paths share it:
+  `generate_for_session_with_critic` builds a session actor (`_session_messages` with optional `critic_feedback`;
+  loader now allows feedback together with metadata/memory) and records the turn via `_record_session_turn`, the same
+  code as `generate_for_session`. `SessionAcbResponse`; `TurnRecord.final_verdict` -> `SessionTurnView.final_verdict`
+  (+ `types.ts`, types only). Diagram `candidate.json` not changed (ACB node now also serves sessions; text not
+  updated). Checks: `uv run pytest` green; lint/build/test:web green. Commit: see git log (T6: `44e6361`).
 
 ## Next step
 

@@ -115,6 +115,8 @@ export interface SessionTurnView {
   estimate: string
   prompt_version: string
   cache_hit: boolean
+  /** Set on Actor-Critic-Boss turns only. */
+  final_verdict?: CriticVerdict | null
   created_at: string
 }
 
@@ -140,6 +142,12 @@ export interface SessionEstimationResponse extends EstimationResponse {
   project_metadata: ProjectMetadata
   /** Turns currently held in the server's sliding history window. */
   history_turns: number
+}
+
+/** POST /sessions/{id}/estimate/acb: the session turn plus the Critic's verdict and trail. Types only; no client function yet. */
+export interface SessionAcbResponse extends SessionEstimationResponse {
+  final_verdict: CriticVerdict
+  iterations: AcbIteration[]
 }
 
 export const DESCRIPTION_MIN = 20
