@@ -11,7 +11,7 @@ Markdown estimate (assumptions, task breakdown, total hours, team and duration).
 | ![Estimator in dark mode answering in Spanish](docs/screenshots/estimator-dark-es.png) | ![Estimator in light mode answering in English](docs/screenshots/estimator-light-en.png) |
 
 - **API:** FastAPI + LiteLLM (`app/`), JSON and SSE streaming endpoints.
-- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`): one conversation per session shown as a thread (your message + its estimate per turn, then a follow-up composer), with attachments, an audience selector (automatic / executive / PM / developer) and a badge with the audience each answer was framed for, a project-memory panel plus a session-memory indicator (commitments kept, running-summary size, last audience); light/dark and Español/English toggles.
+- **UI:** React 19 + TypeScript + Tailwind v4 on Vite (`web/`): one conversation per session shown as a thread (your message + its estimate per turn, then a follow-up composer), with attachments, an audience selector (automatic / executive / PM / developer) and a badge with the audience each answer was framed for, a "Critic review" toggle (sends the turn through the critic loop, shows the verdict and a collapsible trail of attempts and issues), a project-memory panel plus a session-memory indicator (commitments kept, running-summary size, last audience); light/dark and Español/English toggles.
 - **Prompts:** versioned Jinja2 templates (`app/prompts/estimation/v3/`).
 
 **How it works:** [open the interactive estimation flow diagram](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html).

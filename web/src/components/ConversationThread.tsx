@@ -42,7 +42,7 @@ export function ConversationThread({ turns, pending }: ConversationThreadProps) 
           {pending.status === 'error' ? (
             <ErrorAlert message={pending.error ?? ''} />
           ) : (
-            <EstimationResult state={{ status: 'loading' }} />
+            <EstimationResult state={{ status: 'loading', reviewing: pending.review }} />
           )}
         </div>
       )}

@@ -91,7 +91,7 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   stays. Covers schemas, services, routers, settings, tests, `types.ts`, README, AGENTS.md and the
   archify diagram (also fixes the review box to cover session turns, pending from T7a). Commit
   `refactor: ...`. Route: delegated writer.
-- [ ] T7b — Frontend: critic review. `createSessionReviewedEstimate` in `client.ts`, a
+- [x] T7b — Frontend: critic review. `createSessionReviewedEstimate` in `client.ts`, a
   "Revisión con crítico" toggle in the session composer, loading state for the non-streaming call,
   result with final verdict + iteration trail (attempt, verdict, issues by severity). Tests.
   Commit `feat(web): ...`. Route: delegated writer.
@@ -167,8 +167,10 @@ _Updated after each task with commit id and checks._
   code as `generate_for_session`. `SessionAcbResponse`; `TurnRecord.final_verdict` -> `SessionTurnView.final_verdict`
   (+ `types.ts`, types only). Diagram `candidate.json` not changed (ACB node now also serves sessions; text not
   updated). Checks: `uv run pytest` green; lint/build/test:web green. Commit: `f1fdf03`.
-- T7r done (route: delegated writer). Pure rename: `boss.py`/`Boss`/`BossResult` -> `review_loop.py`/`ReviewLoop`/`ReviewLoopResult`; `schemas/acb.py` -> `schemas/review.py` (`ReviewIteration`, `ReviewedEstimateResponse`, `SessionReviewedEstimateResponse`); routes `/estimate/reviewed` and `/sessions/{id}/estimate/reviewed` (no aliases); `BOSS_MAX_ITERATIONS` -> `REVIEW_MAX_ITERATIONS`; log events `review_iteration`/`review_budget_exhausted`; tests renamed to `test_critic_review.py`/`test_session_review.py`; `types.ts`, README, AGENTS.md and diagram updated (review node now covers the session route). Checks: pytest, lint, build, test:web green. T7b: use the new names. Commits: see git log.
+- T7r done (route: delegated writer). Pure rename: `boss.py`/`Boss`/`BossResult` -> `review_loop.py`/`ReviewLoop`/`ReviewLoopResult`; `schemas/acb.py` -> `schemas/review.py` (`ReviewIteration`, `ReviewedEstimateResponse`, `SessionReviewedEstimateResponse`); routes `/estimate/reviewed` and `/sessions/{id}/estimate/reviewed` (no aliases); `BOSS_MAX_ITERATIONS` -> `REVIEW_MAX_ITERATIONS`; log events `review_iteration`/`review_budget_exhausted`; tests renamed to `test_critic_review.py`/`test_session_review.py`; `types.ts`, README, AGENTS.md and diagram updated (review node now covers the session route). Checks: pytest, lint, build, test:web green. T7b: use the new names. Commits: `ef33a1c` (rename), `e920eb9` (diagram/session route).
+
+- T7b done (route: delegated writer). `createSessionReviewedEstimate` shares a private `postSessionTurn` form builder with `createSessionEstimate`. "Revisión con crítico / Critic review" checkbox (off by default, hint about time and cost) next to the audience selector; `onSubmit` gets a third `review` arg and `useSession.run(request, files, review)` picks the endpoint. Pending turn carries `review`: skeleton label + status line "Revisando con el crítico…". Result shows a verdict badge (Aceptada / Requiere iteración (presupuesto agotado) / Rechazada) among the meta chips and a collapsible `<details>` "Revisiones" trail (issues sorted critical > major > minor, ES/EN category labels). Rebuilt threads show the badge from `final_verdict` only (no trail). Checks: lint, build, `pnpm test:web` (117), `uv run pytest` green. Commit: see git log.
 
 ## Next step
 
-user: review, add new settings to `.env.example`, push/PR.
+push + PR.

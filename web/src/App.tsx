@@ -37,8 +37,8 @@ export default function App() {
         sessions={sessions}
         onNewConversation={newConversation}
         onSelectSession={selectSession}
-        onSubmit={async (input, files) => {
-          if (await run({ ...input, language }, files)) setResetKey((key) => key + 1)
+        onSubmit={async (input, files, review) => {
+          if (await run({ ...input, language }, files, review)) setResetKey((key) => key + 1)
         }}
       />
     </LocaleProvider>
@@ -59,7 +59,7 @@ interface AppShellProps {
   sessions: SessionSummary[]
   onNewConversation: () => void
   onSelectSession: (id: string) => void
-  onSubmit: (input: EstimationInput, files: File[]) => void | Promise<void>
+  onSubmit: (input: EstimationInput, files: File[], review: boolean) => void | Promise<void>
 }
 
 function AppShell({

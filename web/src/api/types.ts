@@ -53,7 +53,7 @@ export interface ReviewIteration {
   issues: CriticIssue[]
 }
 
-/** POST /estimate/reviewed (critic review loop). Mirrored for a future UI; no client function yet. */
+/** POST /estimate/reviewed (critic review loop). Mirrored for completeness; the UI only uses the session variant. */
 export interface ReviewedEstimateResponse {
   estimation: string
   prompt_version: string
@@ -77,6 +77,9 @@ export interface GenerationMeta {
   /** Tier the answer was framed for and the resolver rule behind it; absent for turns rebuilt without them. */
   audience?: Audience
   audience_rule?: string
+  /** Critic review turns only: the final verdict, and the attempts (absent on turns rebuilt from the server). */
+  final_verdict?: CriticVerdict
+  iterations?: ReviewIteration[]
 }
 
 /** Facts about the project that the server extracts and remembers across turns. */
@@ -144,7 +147,7 @@ export interface SessionEstimationResponse extends EstimationResponse {
   history_turns: number
 }
 
-/** POST /sessions/{id}/estimate/reviewed: the session turn plus the Critic's verdict and trail. Types only; no client function yet. */
+/** POST /sessions/{id}/estimate/reviewed: the session turn plus the Critic's verdict and trail. */
 export interface SessionReviewedEstimateResponse extends SessionEstimationResponse {
   final_verdict: CriticVerdict
   iterations: ReviewIteration[]

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, createSession, createSessionEstimate, getSession, listSessions } from '../api/client'
+import { ApiError, createSession, createSessionEstimate, createSessionReviewedEstimate, getSession, listSessions } from '../api/client'
 import { EMPTY_PROJECT_METADATA } from '../api/types'
 import { METADATA, REQUEST, sessionDetail, sessionEstimate, sessionSummary, sessionTurn } from '../test/fixtures'
 import { useSession } from './useSession'
@@ -10,18 +10,21 @@ vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   createSession: vi.fn(),
   createSessionEstimate: vi.fn(),
+  createSessionReviewedEstimate: vi.fn(),
   getSession: vi.fn(),
   listSessions: vi.fn(),
 }))
 
 const createSessionMock = vi.mocked(createSession)
 const estimateMock = vi.mocked(createSessionEstimate)
+const reviewedMock = vi.mocked(createSessionReviewedEstimate)
 const getSessionMock = vi.mocked(getSession)
 const listSessionsMock = vi.mocked(listSessions)
 
 beforeEach(() => {
   createSessionMock.mockReset()
   estimateMock.mockReset()
+  reviewedMock.mockReset()
   getSessionMock.mockReset()
   listSessionsMock.mockReset()
   listSessionsMock.mockResolvedValue([])
@@ -77,6 +80,7 @@ describe('useSession', () => {
       description: REQUEST.description,
       attachmentNames: ['a.pdf'],
       status: 'loading',
+      review: false,
       error: null,
     })
 
@@ -98,6 +102,32 @@ describe('useSession', () => {
       memory: { anchors: 0, summaryChars: 0, audience: 'default', audienceRule: 'default' },
     })
     expect(estimateMock).toHaveBeenCalledWith('s1', REQUEST, files, expect.any(AbortSignal))
+  })
+
+  it('sends the turn to the reviewed endpoint and keeps verdict and trail', async () => {
+    const iterations = [{ attempt: 1, verdict: 'accept' as const, issues: [] }]
+    reviewedMock.mockResolvedValue({ ...sessionEstimate(), final_verdict: 'accept', iterations })
+    const { result } = await mounted()
+
+    act(() => void result.current.run(REQUEST, [], true))
+    expect(result.current.pending).toMatchObject({ status: 'loading', review: true })
+    await waitFor(() => expect(result.current.turns).toHaveLength(1))
+
+    expect(estimateMock).not.toHaveBeenCalled()
+    expect(reviewedMock).toHaveBeenCalledWith('s1', REQUEST, [], expect.any(AbortSignal))
+    expect(result.current.turns[0].meta).toMatchObject({ final_verdict: 'accept', iterations })
+  })
+
+  it('shows the stored verdict on turns rebuilt from the session detail', async () => {
+    getSessionMock.mockResolvedValue(
+      sessionDetail({ session_id: 's1', turns: [sessionTurn(), sessionTurn({ final_verdict: 'reject' })] }),
+    )
+    localStorage.setItem('estimator.sessionId', 's1')
+    const { result } = renderHook(() => useSession())
+    await waitFor(() => expect(result.current.turns).toHaveLength(2))
+
+    expect(result.current.turns[0].meta).not.toHaveProperty('final_verdict')
+    expect(result.current.turns[1].meta?.final_verdict).toBe('reject')
   })
 
   it('creates the session first when run is called before one exists', async () => {

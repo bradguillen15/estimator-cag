@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ApiError, createSession, createSessionEstimate, getSession, listSessions } from '../api/client'
+import { ApiError, createSession, createSessionEstimate, createSessionReviewedEstimate, getSession, listSessions } from '../api/client'
 import { EMPTY_PROJECT_METADATA } from '../api/types'
-import type { Audience, EstimationRequest, GenerationMeta, ProjectMetadata, SessionDetail, SessionSummary } from '../api/types'
+import type {
+  Audience,
+  EstimationRequest,
+  GenerationMeta,
+  ProjectMetadata,
+  SessionDetail,
+  SessionEstimationResponse,
+  SessionReviewedEstimateResponse,
+  SessionSummary,
+} from '../api/types'
 
 /** One finished exchange: what the user sent and the estimate that came back. */
 export interface ThreadTurn {
@@ -18,6 +27,8 @@ export interface PendingTurn {
   description: string
   attachmentNames: string[]
   status: 'loading' | 'error'
+  /** The turn goes through the critic review (a longer wait). */
+  review: boolean
   error: string | null
 }
 
@@ -65,6 +76,7 @@ function writeStoredSessionId(id: string): void {
   }
 }
 
+const isReviewed = (response: SessionEstimationResponse): response is SessionReviewedEstimateResponse => 'final_verdict' in response
 const isAbort = (error: unknown): boolean => error instanceof DOMException && error.name === 'AbortError'
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -73,7 +85,11 @@ const toThreadTurns = (detail: SessionDetail): ThreadTurn[] =>
     description: turn.description,
     attachmentNames: turn.attachment_names,
     text: turn.estimate,
-    meta: { prompt_version: turn.prompt_version, cache_hit: turn.cache_hit },
+    meta: {
+      prompt_version: turn.prompt_version,
+      cache_hit: turn.cache_hit,
+      ...(turn.final_verdict ? { final_verdict: turn.final_verdict } : {}),
+    },
   }))
 
 /** Per-turn audience is not stored: only the latest turn's tier is known on a rebuilt thread. */
@@ -195,21 +211,22 @@ export function useSession() {
 
   const run = useCallback(
     /** Resolves true when the turn was added to the thread (the composer can then clear). */
-    async (request: EstimationRequest, files: File[]): Promise<boolean> => {
+    async (request: EstimationRequest, files: File[], review = false): Promise<boolean> => {
       const controller = abortInFlight()
       const { signal } = controller
       const attachmentNames = files.map((file) => file.name)
       const sent = { description: request.description, attachmentNames }
       setError(null)
-      setPending({ ...sent, status: 'loading', error: null })
+      setPending({ ...sent, status: 'loading', review, error: null })
+      const send = review ? createSessionReviewedEstimate : createSessionEstimate
 
       try {
         let id = sessionIdRef.current ?? (await startSession(signal))
         if (id === null) return false
 
-        let response
+        let response: SessionEstimationResponse | SessionReviewedEstimateResponse
         try {
-          response = await createSessionEstimate(id, request, files, signal)
+          response = await send(id, request, files, signal)
         } catch (error) {
           // The server forgot the session (e.g. it restarted): start over once, memory is lost.
           if (!(error instanceof ApiError) || error.status !== 404) throw error
@@ -217,7 +234,7 @@ export function useSession() {
           if (id === null) return false
           // A restarted session has no history: the earlier turns belong to the lost one.
           setTurns([])
-          response = await createSessionEstimate(id, request, files, signal)
+          response = await send(id, request, files, signal)
         }
 
         if (signal.aborted) return false
@@ -231,6 +248,7 @@ export function useSession() {
               cache_hit: response.cache_hit,
               audience: response.audience,
               audience_rule: response.audience_rule,
+              ...(isReviewed(response) ? { final_verdict: response.final_verdict, iterations: response.iterations } : {}),
             },
           },
         ])
@@ -252,7 +270,7 @@ export function useSession() {
         return true
       } catch (error) {
         if (isAbort(error) || signal.aborted) return false
-        setPending({ ...sent, status: 'error', error: messageOf(error) })
+        setPending({ ...sent, status: 'error', review, error: messageOf(error) })
         return false
       }
     },
