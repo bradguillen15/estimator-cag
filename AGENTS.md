@@ -21,6 +21,10 @@ The interactive diagram of this flow, with file/line sources per node, is
 [viewable here](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html)
 (source: `docs/architecture/estimation-flow/`; see §5.5 to regenerate it).
 
+`POST /api/v1/estimate/acb` runs the same entry (guardrails) then `EstimationService.generate_with_critic`:
+`Boss` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
+(max `BOSS_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
+
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
@@ -81,6 +85,8 @@ app/
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
     ├── sessions.py             # Session state: sliding-window history (returns evicted turns; holds anchors + summary) + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
     ├── history_compression.py  # Evicted turns: anchor regex (EN/ES) keeps commitments verbatim, the rest is folded by the summarizer
+    ├── critic.py               # Actor-Critic-Boss: LLM audit (prompts/critic/<version>/) -> `CriticFeedback`; any failure = accept (logged)
+    ├── boss.py                 # Actor-Critic-Boss: pure loop (no SDK/HTTP); accept / iterate with feedback / reject / budget exhausted
     ├── summarizer.py           # Third LLM call (prompts/summary/<version>/): bounded running summary; failure keeps the previous one
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)

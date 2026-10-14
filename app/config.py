@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # (at most this many; the oldest is dropped beyond it) or folded into a bounded running summary.
     session_max_anchors: int = Field(default=5, ge=0)
     session_summary_max_chars: int = Field(default=2000, ge=200)
+    # Actor-Critic-Boss (POST /estimate/acb). CRITIC_MODEL is one "<provider>/<model>" entry for the
+    # Critic (a cheaper model is fine); empty reuses the LLM_MODELS chain. BOSS_MAX_ITERATIONS is the
+    # maximum number of actor attempts (each costs one actor call plus one critic call).
+    critic_model: str = ""
+    boss_max_iterations: int = Field(default=3, ge=1)
     app_env: str
     log_level: str
 

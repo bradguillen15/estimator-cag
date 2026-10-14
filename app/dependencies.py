@@ -13,11 +13,13 @@ from app.schemas.estimations import DetailLevel, EstimationRequest, OutputFormat
 from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, check_attachment_count
 from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
+from app.services.boss import Boss
+from app.services.critic import Critic
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.guardrails.input import InputGuardrails
 from app.services.history_compression import HistoryCompressor
-from app.services.llm.base import ModerationProvider
-from app.services.llm.factory import get_embedder, get_llm_provider, get_moderator
+from app.services.llm.base import LLMProvider, ModerationProvider
+from app.services.llm.factory import get_critic_provider, get_embedder, get_llm_provider, get_moderator
 from app.services.sessions import Session, SessionStore
 from app.services.summarizer import ConversationSummarizer
 
@@ -45,6 +47,15 @@ def _get_moderator() -> ModerationProvider | None:
         return None
 
 
+def _get_critic_provider(default: LLMProvider) -> LLMProvider:
+    try:
+        return get_critic_provider(settings) or default
+    except ValueError:
+        # Optional feature: a bad CRITIC_MODEL degrades to "reuse the main chain", not a 500 per request.
+        logger.warning("critic_model_ignored", reason="config_error")
+        return default
+
+
 @lru_cache
 def get_estimation_service() -> EstimationService:
     provider = get_llm_provider(settings)
@@ -55,6 +66,8 @@ def get_estimation_service() -> EstimationService:
         semantic_cache=_get_semantic_cache(),
         cache_models=tuple(settings.llm_models),
         history_compressor=HistoryCompressor(ConversationSummarizer(provider, settings.session_summary_max_chars)),
+        critic=Critic(_get_critic_provider(provider)),
+        boss=Boss(settings.boss_max_iterations),
     )
 
 

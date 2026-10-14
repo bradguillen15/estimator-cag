@@ -8,6 +8,7 @@ from starlette.concurrency import iterate_in_threadpool
 
 from app.dependencies import get_estimation_service, get_prompt_version, get_safe_request
 from app.exceptions import EstimationError
+from app.schemas.acb import AcbResponse
 from app.schemas.estimations import (
     EstimationRequest,
     EstimationResponse,
@@ -43,6 +44,18 @@ def create_estimate(body: SafeRequest, service: Service, prompt_version: PromptV
     metrics = GenerationMetrics(model=service.model)
     text = service.generate(body, prompt_version, metrics=metrics)
     return EstimationResponse(text=text, prompt_version=prompt_version, cache_hit=metrics.cache_hit)
+
+
+@router.post("/estimate/acb", response_model=AcbResponse)
+def create_estimate_acb(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> AcbResponse:
+    """Actor-Critic-Boss: up to 2 x BOSS_MAX_ITERATIONS LLM calls, caches bypassed."""
+    result = service.generate_with_critic(body, prompt_version)
+    return AcbResponse(
+        estimation=result.estimate,
+        prompt_version=prompt_version,
+        final_verdict=result.final_verdict,
+        iterations=result.iterations,
+    )
 
 
 @router.post("/estimate/stream", response_class=EventSourceResponse)

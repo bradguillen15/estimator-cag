@@ -55,7 +55,7 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   guardrail check, cost/hours bounds parsed from the Markdown total, content recall of expected
   keywords), `run_all_metrics`, CLI `uv run python -m evals.run` (real provider, report to stdout,
   non-zero exit below a threshold). Tests with a fake provider. Route: delegated writer.
-- [ ] T3 — Actor-Critic-Boss. Critic (cheap model, `CRITIC_MODEL`, falls back to the main chain)
+- [x] T3 — Actor-Critic-Boss. Critic (cheap model, `CRITIC_MODEL`, falls back to the main chain)
   audits the Markdown estimate and returns structured feedback (verdict accept / needs_iteration /
   reject; issues with category, severity, message); Boss is a pure state machine
   (`BOSS_MAX_ITERATIONS`, default 3) that re-calls the actor with a trailing `critic_feedback`
@@ -84,6 +84,13 @@ T1 (history compression):
 | `SESSION_MAX_ANCHORS` | `5` | Max turns kept verbatim as commitments per session; the oldest is dropped beyond it (`0` disables anchors). |
 | `SESSION_SUMMARY_MAX_CHARS` | `2000` | Hard cap (min 200) on the running summary of folded turns; also stated to the summarizer. |
 
+T3 (Actor-Critic-Boss):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CRITIC_MODEL` | empty | Optional single `<provider>/<model>` for the Critic (e.g. a cheaper one). Empty reuses the `LLM_MODELS` chain. An invalid value is logged and falls back to the main chain. |
+| `BOSS_MAX_ITERATIONS` | `3` | Max actor attempts per `/estimate/acb` request (min 1); worst case 2 x N LLM calls. |
+
 ## Progress
 
 _Updated after each task with commit id and checks._
@@ -94,12 +101,20 @@ _Updated after each task with commit id and checks._
   trailing `history_memory.j2` block (absent when empty; byte-identical test). Detail route exposes
   `anchors_count`/`summary_chars` (+ `types.ts`). Checks: `uv run pytest` green; `pnpm lint`,
   `pnpm build`, `pnpm test:web` green.
-- T2 done (route: delegated writer). `evals/` (dataset.py pydantic, metrics.py, run.py, 7-case
+- T2 done (route: delegated writer), commit `d94d0c9`. `evals/` (dataset.py pydantic, metrics.py, run.py, 7-case
   golden_dataset.json); the runner builds `EstimationService` with no caches (NoOp), so every case
   hits the model; no new settings. Metrics parse the Markdown total; insufficient-info case expects
   the heading and no total. `pnpm evals` script, README + AGENTS updated. Checks: `uv run pytest`
   green (382); `python -m evals.run --help` makes no API call.
+- T3 done (route: delegated writer). `schemas/{critic,acb}.py`, `services/{critic,boss}.py`, prompt
+  `prompts/critic/v1` + trailing `estimation/v3/critic_feedback.j2` (rendered only with feedback;
+  stateless path only; default prompt verified byte-identical to pre-change). Decisions:
+  `needs_iteration` without a critical/major issue and `reject` without issues are coerced to `accept`
+  in the schema validator; critic issues containing prompt-injection patterns are dropped; budget
+  exhausted returns the last draft with `final_verdict: needs_iteration`; ACB bypasses both caches.
+  `POST /estimate/acb`; `types.ts` mirrors `AcbResponse` (no client function / UI). Checks: see commit.
+  Pending: architecture diagram (`docs/architecture/estimation-flow`) not updated for ACB.
 
 ## Next step
 
-T3.
+T4.

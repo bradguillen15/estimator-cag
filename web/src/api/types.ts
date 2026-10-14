@@ -25,6 +25,36 @@ export interface EstimationResponse {
   cache_hit: boolean
 }
 
+export type CriticVerdict = 'accept' | 'needs_iteration' | 'reject'
+
+export interface CriticIssue {
+  category:
+    | 'math_error'
+    | 'hallucination'
+    | 'scope_mismatch'
+    | 'phase_imbalance'
+    | 'missing_assumption'
+    | 'unrealistic_estimate'
+  severity: 'critical' | 'major' | 'minor'
+  message: string
+}
+
+export interface AcbIteration {
+  /** 1-based actor attempt. */
+  attempt: number
+  verdict: CriticVerdict
+  issues: CriticIssue[]
+}
+
+/** POST /estimate/acb (Actor-Critic-Boss). Mirrored for a future UI; no client function yet. */
+export interface AcbResponse {
+  estimation: string
+  prompt_version: string
+  /** needs_iteration here means the iteration budget ran out with issues still open. */
+  final_verdict: CriticVerdict
+  iterations: AcbIteration[]
+}
+
 export interface PromptContext {
   prompt_version: string
   examples_markdown: string

@@ -74,6 +74,7 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `GET` | `/health` | `{"status": "ok"}` |
 | `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`) |
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
+| `POST` | `/api/v1/estimate/acb` | `AcbResponse` (`estimation`, `prompt_version`, `final_verdict`, `iterations`): Actor-Critic-Boss, see below |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
 | `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
 | `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
@@ -127,6 +128,19 @@ The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are 
 **400**. Limits: 5 files, 5 MB each, 60,000 extracted characters in total; `.doc`, encrypted PDFs
 and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
 process memory: a restart forgets them.
+
+**Actor-Critic-Boss** (`POST /estimate/acb`, same body and input guardrails as `/estimate`): the
+estimate is audited by a *Critic* (a second LLM call that answers JSON: verdict `accept` |
+`needs_iteration` | `reject`, plus issues with category, severity and message). A *Boss* (pure
+orchestration, `services/boss.py`) re-runs the actor with a trailing `critic_feedback` prompt block
+while the Critic asks for another iteration and `BOSS_MAX_ITERATIONS` (default 3, the maximum number
+of actor attempts) allows it; `reject` stops at once. The last draft is always returned with
+`final_verdict` (`needs_iteration` means the budget ran out with issues open) and the per-attempt
+`iterations` trail. A `needs_iteration` without a critical/major issue counts as `accept`, and a
+Critic failure (provider error, invalid JSON) accepts the draft and is logged. **Cost: up to
+2 x `BOSS_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
+critic). `CRITIC_MODEL` (optional `<provider>/<model>`, e.g. a cheaper one) overrides the model;
+empty reuses `LLM_MODELS`. Both caches are bypassed. No UI yet.
 
 **History** is a sliding window of the last `SESSION_MAX_TURNS` turns (default 6; a turn is a
 user message plus the answer). Each call sends the system prompt, rebuilt with the current

@@ -10,6 +10,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from app.exceptions import PromptTemplateError
+from app.schemas.critic import CriticIssue
 from app.schemas.estimations import EstimationRequest
 from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
 
@@ -111,11 +112,31 @@ def _neutralize(memory: HistoryMemory) -> HistoryMemory:
     )
 
 
+_FEEDBACK_TAG_RE = re.compile(r"<(/?)\s*(critic_feedback|issue)\b", re.IGNORECASE)
+
+
+def _system_prompt_with_feedback(
+    version: str, detail_level: str, output_format: str, language: str, issues: Sequence[CriticIssue]
+) -> str:
+    # Not cached: the issues differ on every re-attempt. The block is trailing (prefix unchanged).
+    # Messages come from an LLM that read user text, so tags that would close the block are defused.
+    cleaned = [issue.model_copy(update={"message": _FEEDBACK_TAG_RE.sub(r"<\1 \2", issue.message)}) for issue in issues]
+    return _render(
+        version,
+        "system.j2",
+        detail_level=detail_level,
+        output_format=output_format,
+        language=language,
+        critic_feedback=cleaned,
+    )
+
+
 def render_estimation_prompt(
     request: EstimationRequest,
     version: str = PROMPT_VERSION,
     project_metadata: ProjectMetadata | None = None,
     history_memory: HistoryMemory | None = None,
+    critic_feedback: Sequence[CriticIssue] | None = None,
 ) -> tuple[str, str]:
     """Return ``(system, user)`` prompts ready for the LLM.
 
@@ -124,8 +145,10 @@ def render_estimation_prompt(
     answer entirely in ``request.language``. Session requests pass ``project_metadata``: the
     system prompt then closes with a ``<project_metadata>`` block (empty tags on the first turn).
     ``history_memory`` (summary + anchors of the turns that left the window) adds one more trailing
-    block, only when non-empty and only together with ``project_metadata``. Versions whose
-    ``system.j2`` predates a block ignore it.
+    block, only when non-empty and only together with ``project_metadata``. ``critic_feedback``
+    (the Critic's issues, stateless Actor-Critic-Boss re-attempts only) adds a last trailing block,
+    only when non-empty and without ``project_metadata``. Versions whose ``system.j2`` predates a
+    block ignore it.
     """
     user = _render(
         version,
@@ -137,6 +160,8 @@ def render_estimation_prompt(
     )
     parameters = (version, request.detail_level.value, request.output_format.value, request.language.value)
     if project_metadata is None:
+        if critic_feedback:
+            return _system_prompt_with_feedback(*parameters, critic_feedback), user
         return _system_prompt(*parameters), user
     return _system_prompt_with_metadata(*parameters, project_metadata, history_memory), user
 
@@ -203,4 +228,30 @@ def render_summary_prompt(
         for t in turns
     ]
     user = environment.get_template("user.j2").render(previous_summary=previous_summary, turns=clipped).strip()
+    return system, user
+
+
+# Version of the Critic prompt (app/prompts/critic/<version>/).
+CRITIC_PROMPT_VERSION = "v1"
+
+
+@lru_cache
+def _critic_environment(version: str) -> Environment:
+    version_dir = _PROMPTS_ROOT / "critic" / version
+    if not version_dir.is_dir():
+        raise PromptTemplateError(f"Unknown critic prompt version: {version!r}")
+    return _build_environment(version_dir)
+
+
+def render_critic_prompt(
+    description: str, estimate: str, version: str = CRITIC_PROMPT_VERSION
+) -> tuple[str, str]:
+    """Return ``(system, user)`` prompts for the LLM that audits an estimate and answers with JSON."""
+    environment = _critic_environment(version)
+    system = environment.get_template("system.j2").render().strip()
+    user = (
+        environment.get_template("user.j2")
+        .render(description=description.strip(), estimate=estimate.strip())
+        .strip()
+    )
     return system, user

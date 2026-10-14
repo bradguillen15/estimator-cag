@@ -52,3 +52,11 @@ def test_main_provider_config_errors_still_fail(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(dependencies, "settings", _settings(anthropic_api_key=None))
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         dependencies.get_estimation_service()
+
+
+def test_invalid_critic_model_falls_back_to_the_main_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dependencies, "settings", _settings(critic_model="gemini/flash"))
+    main = object()
+    with capture_logs() as logs:
+        assert dependencies._get_critic_provider(main) is main
+    assert {"event": "critic_model_ignored", "reason": "config_error", "log_level": "warning"} in logs

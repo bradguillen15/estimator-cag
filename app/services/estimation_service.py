@@ -8,6 +8,8 @@ prompt also carries the session's history and project metadata, which the cache 
 cover, so a hit could replay an answer built on another conversation. After the answer, the turn
 is added to the history window, turns that overflow it are compressed (anchors kept verbatim,
 the rest folded into a summary) and the metadata is updated for the next turn.
+
+``generate_with_critic`` (Actor-Critic-Boss) also skips both caches and delegates the loop to ``Boss``.
 """
 
 from collections.abc import Iterator, Sequence
@@ -18,9 +20,12 @@ import structlog
 
 from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
+from app.services.boss import Boss, BossResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
 from app.services.attachments import Attachment, build_description, display_name
+from app.schemas.critic import CriticFeedback
+from app.services.critic import Critic
 from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
 from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
@@ -60,8 +65,12 @@ class EstimationService:
         semantic_cache: SemanticCache | None = None,
         metadata_extractor: MetadataExtractor | None = None,
         history_compressor: HistoryCompressor | None = None,
+        critic: Critic | None = None,
+        boss: Boss | None = None,
     ) -> None:
         self._provider = provider
+        self._critic = critic or Critic(provider)
+        self._boss = boss or Boss()
         self._history_compressor = history_compressor or HistoryCompressor(ConversationSummarizer(provider))
         self._metadata_extractor = metadata_extractor or MetadataExtractor(provider)
         self._guardrails = guardrails or InputGuardrails()
@@ -137,6 +146,23 @@ class EstimationService:
         if self._passes_output_check(request, text, prompt_version):
             self._store(key, semantic, CachedAnswer(text=text))
         return text
+
+    def generate_with_critic(self, request: EstimationRequest, prompt_version: str = PROMPT_VERSION) -> BossResult:
+        """Actor-Critic-Boss: the estimate is audited and regenerated until accepted or out of budget.
+
+        Expects a prepared request. Both caches are bypassed: the result depends on the Critic's
+        judgement of each attempt, and a cache hit would skip the very loop the caller asked for. The
+        output check runs on the final answer only (logged, as on ``generate``).
+        """
+
+        def actor(feedback: CriticFeedback | None) -> str:
+            issues = feedback.issues if feedback else None
+            system, user = render_estimation_prompt(request, prompt_version, critic_feedback=issues)
+            return self._provider.complete(system, user)
+
+        result = self._boss.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        self._passes_output_check(request, result.estimate, prompt_version)
+        return result
 
     def generate_for_session(
         self,
