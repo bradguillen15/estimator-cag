@@ -104,11 +104,11 @@ class LiteLLMProvider:
         self._max_tokens = max_tokens
         self._completion = completion
 
-    def _call(self, model: str, system_prompt: str, user_prompt: str, **extra: Any) -> Any:
+    def _call(self, model: str, messages: list[dict[str, str]], **extra: Any) -> Any:
         prefix = model.split("/", 1)[0]
         params: dict[str, Any] = {
             "model": model,
-            "messages": _messages(system_prompt, user_prompt),
+            "messages": messages,
             "api_key": self._api_keys.get(prefix),
             "timeout": self._timeout,
             "num_retries": self._retries,
@@ -121,14 +121,18 @@ class LiteLLMProvider:
         return completion(**params)
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
-        call_logger = logger.bind(model=self.model, provider=self.name, stream=False)
+        return self.complete_messages(_messages(system_prompt, user_prompt))
+
+    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+        """Same fallback chain as ``complete``, for a full conversation (system message first)."""
+        call_logger = logger.bind(model=self.model, provider=self.name, stream=False, messages=len(messages))
         call_logger.info("llm_call_started")
         started_at = perf_counter()
         last_error: Exception | None = None
 
         for attempt, model in enumerate(self._models):
             try:
-                completion = self._call(model, system_prompt, user_prompt)
+                completion = self._call(model, messages)
                 content = completion.choices[0].message.content
                 if not content:
                     raise LLMProviderError("El proveedor LLM devolvió una respuesta vacía.")
@@ -248,8 +252,7 @@ class LiteLLMProvider:
         """
         raw = self._call(
             model,
-            system_prompt,
-            user_prompt,
+            _messages(system_prompt, user_prompt),
             stream=True,
             stream_options={"include_usage": True},
         )

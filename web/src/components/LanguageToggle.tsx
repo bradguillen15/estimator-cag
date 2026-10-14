@@ -7,9 +7,10 @@ import type { SegmentOption } from './SegmentedControl'
 interface LanguageToggleProps {
   value: ResponseLanguage
   onChange: (language: ResponseLanguage) => void
+  compact?: boolean
 }
 
-export function LanguageToggle({ value, onChange }: LanguageToggleProps) {
+export function LanguageToggle({ value, onChange, compact }: LanguageToggleProps) {
   const t = useT()
   const locale = useLocale()
   const options: SegmentOption<ResponseLanguage>[] = languageOptions(locale).map(({ value: optionValue, label }) => ({
@@ -23,6 +24,6 @@ export function LanguageToggle({ value, onChange }: LanguageToggleProps) {
   }))
 
   return (
-    <SegmentedControl name="response-language" label={t('language.label')} value={value} options={options} onChange={onChange} />
+    <SegmentedControl name="response-language" label={t('language.label')} value={value} options={options} onChange={onChange} compact={compact} />
   )
 }

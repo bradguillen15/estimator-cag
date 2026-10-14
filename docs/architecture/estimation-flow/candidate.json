@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "e8532673963532c62ba172c1e0897310ddc5514d"
+      "revision": "076b09afea88640b1fe0b6a5c55b0413784475d1"
     }
   },
   "components": [
@@ -17,13 +17,75 @@
       "id": "ui",
       "type": "frontend",
       "label": "React UI",
-      "sublabel": "web/src",
-      "tag": "JSON or SSE",
-      "pos": [40, 200],
-      "size": [150, 64],
+      "sublabel": "conversation thread",
+      "tag": "multipart + files",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "web/src/hooks/useEstimation.ts", "line": 20, "end_line": 38 },
-        { "path": "web/src/api/client.ts", "line": 72, "end_line": 111 }
+        {
+          "path": "web/src/hooks/useSession.ts",
+          "line": 159,
+          "end_line": 206
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "line": 72,
+          "end_line": 108
+        }
+      ]
+    },
+    {
+      "id": "sessions",
+      "type": "backend",
+      "label": "Sessions router",
+      "sublabel": "/api/v1/sessions[/{id}/estimate]",
+      "tag": "create, list, resume, turn",
+      "pos": [
+        290,
+        200
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/routers/sessions.py",
+          "line": 32,
+          "end_line": 87
+        },
+        {
+          "path": "app/main.py",
+          "line": 52,
+          "end_line": 54
+        }
+      ]
+    },
+    {
+      "id": "apiclient",
+      "type": "external",
+      "label": "Direct API caller",
+      "sublabel": "stateless request",
+      "pos": [
+        290,
+        20
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/routers/estimations.py",
+          "line": 40,
+          "end_line": 45
+        }
       ]
     },
     {
@@ -31,12 +93,26 @@
       "type": "backend",
       "label": "Estimations router",
       "sublabel": "/api/v1/estimate[/stream]",
-      "tag": "maps errors to HTTP",
-      "pos": [290, 200],
-      "size": [150, 64],
+      "tag": "JSON or SSE",
+      "pos": [
+        540,
+        20
+      ],
+      "size": [
+        170,
+        64
+      ],
       "sources": [
-        { "path": "app/routers/estimations.py", "line": 40, "end_line": 85 },
-        { "path": "app/main.py", "line": 49, "end_line": 67 }
+        {
+          "path": "app/routers/estimations.py",
+          "line": 40,
+          "end_line": 85
+        },
+        {
+          "path": "app/main.py",
+          "line": 57,
+          "end_line": 85
+        }
       ]
     },
     {
@@ -45,11 +121,52 @@
       "label": "Input guardrails",
       "sublabel": "injection + PII redaction",
       "tag": "rejects with 400",
-      "pos": [540, 200],
-      "size": [150, 64],
+      "pos": [
+        540,
+        200
+      ],
+      "size": [
+        170,
+        64
+      ],
       "sources": [
-        { "path": "app/dependencies.py", "line": 55, "end_line": 86 },
-        { "path": "app/services/guardrails/input.py", "line": 110, "end_line": 160 }
+        {
+          "path": "app/dependencies.py",
+          "line": 88,
+          "end_line": 133
+        },
+        {
+          "path": "app/services/guardrails/input.py",
+          "line": 149,
+          "end_line": 161
+        }
+      ]
+    },
+    {
+      "id": "attachments",
+      "type": "backend",
+      "label": "Attachment extraction",
+      "sublabel": "PDF / .docx to text",
+      "tag": "session turns only",
+      "pos": [
+        540,
+        380
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/attachments.py",
+          "line": 41,
+          "end_line": 89
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 89,
+          "end_line": 108
+        }
       ]
     },
     {
@@ -58,11 +175,25 @@
       "label": "EstimationService",
       "sublabel": "orchestrates the request",
       "tag": "checks the answer",
-      "pos": [820, 200],
-      "size": [150, 64],
+      "pos": [
+        820,
+        160
+      ],
+      "size": [
+        150,
+        144
+      ],
       "sources": [
-        { "path": "app/services/estimation_service.py", "line": 62, "end_line": 86 },
-        { "path": "app/services/estimation_service.py", "line": 121, "end_line": 135 }
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 110,
+          "end_line": 134
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 136,
+          "end_line": 169
+        }
       ]
     },
     {
@@ -70,12 +201,26 @@
       "type": "database",
       "label": "Response cache",
       "sublabel": "Redis: exact + semantic",
-      "tag": "opt-in",
-      "pos": [820, 20],
-      "size": [150, 64],
+      "tag": "stateless only, opt-in",
+      "pos": [
+        820,
+        20
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "app/services/cache/redis_cache.py", "line": 13, "end_line": 43 },
-        { "path": "app/services/cache/semantic.py", "line": 94, "end_line": 155 }
+        {
+          "path": "app/services/cache/redis_cache.py",
+          "line": 13,
+          "end_line": 43
+        },
+        {
+          "path": "app/services/cache/semantic.py",
+          "line": 94,
+          "end_line": 155
+        }
       ]
     },
     {
@@ -84,11 +229,62 @@
       "label": "CAG prompt",
       "sublabel": "Jinja2 rules + examples",
       "tag": "versioned (v3)",
-      "pos": [820, 380],
-      "size": [150, 64],
+      "pos": [
+        820,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "app/prompts/loader.py", "line": 63, "end_line": 92 },
-        { "path": "app/prompts/estimation/v3/system.j2", "line": 72, "end_line": 78 }
+        {
+          "path": "app/prompts/loader.py",
+          "line": 87,
+          "end_line": 111
+        },
+        {
+          "path": "app/prompts/estimation/v3/system.j2",
+          "line": 72,
+          "end_line": 82
+        },
+        {
+          "path": "app/prompts/estimation/v3/project_metadata.j2",
+          "line": 1,
+          "end_line": 21
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "Session store",
+      "sublabel": "history window + facts",
+      "tag": "in-process memory",
+      "pos": [
+        1130,
+        20
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/sessions.py",
+          "line": 32,
+          "end_line": 104
+        },
+        {
+          "path": "app/services/sessions.py",
+          "line": 107,
+          "end_line": 138
+        },
+        {
+          "path": "app/dependencies.py",
+          "line": 57,
+          "end_line": 65
+        }
       ]
     },
     {
@@ -97,10 +293,47 @@
       "label": "LiteLLMProvider",
       "sublabel": "ordered LLM_MODELS",
       "tag": "fallback on failure",
-      "pos": [1130, 200],
-      "size": [150, 64],
+      "pos": [
+        1130,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "app/services/llm/litellm.py", "line": 107, "end_line": 158 }
+        {
+          "path": "app/services/llm/litellm.py",
+          "line": 107,
+          "end_line": 162
+        }
+      ]
+    },
+    {
+      "id": "extractor",
+      "type": "backend",
+      "label": "Metadata extractor",
+      "sublabel": "2nd LLM call per turn",
+      "tag": "keeps old facts on failure",
+      "pos": [
+        1130,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/metadata_extractor.py",
+          "line": 37,
+          "end_line": 75
+        },
+        {
+          "path": "app/prompts/loader.py",
+          "line": 114,
+          "end_line": 145
+        }
       ]
     },
     {
@@ -108,11 +341,25 @@
       "type": "external",
       "label": "Anthropic API",
       "sublabel": "primary model",
-      "pos": [1360, 200],
-      "size": [150, 64],
+      "pos": [
+        1400,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "app/services/llm/litellm.py", "line": 118, "end_line": 119 },
-        { "path": "app/config.py", "line": 17, "end_line": 22 }
+        {
+          "path": "app/services/llm/litellm.py",
+          "line": 118,
+          "end_line": 119
+        },
+        {
+          "path": "app/config.py",
+          "line": 17,
+          "end_line": 22
+        }
       ]
     },
     {
@@ -120,34 +367,133 @@
       "type": "external",
       "label": "OpenAI API",
       "sublabel": "fallback model",
-      "pos": [1360, 380],
-      "size": [150, 64],
+      "pos": [
+        1400,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
       "sources": [
-        { "path": "app/services/llm/factory.py", "line": 17, "end_line": 21 }
+        {
+          "path": "app/services/llm/factory.py",
+          "line": 17,
+          "end_line": 21
+        }
       ]
     }
   ],
-  "boundaries": [
-    {
-      "kind": "region",
-      "label": "FastAPI backend: app/",
-      "wraps": ["router", "guard", "service", "prompts", "llm"]
-    }
-  ],
   "connections": [
-    { "id": "ui-to-router", "from": "ui", "to": "router", "label": "HTTP / SSE", "variant": "emphasis" },
-    { "id": "router-to-guard", "from": "router", "to": "guard", "label": "Depends", "variant": "emphasis" },
-    { "id": "guard-to-service", "from": "guard", "to": "service", "label": "sanitized text", "variant": "emphasis" },
-    { "id": "service-to-cache", "from": "service", "to": "cache", "label": "1 lookup / store", "fromSide": "top", "toSide": "bottom" },
-    { "id": "service-to-prompts", "from": "service", "to": "prompts", "label": "2 render on miss", "fromSide": "bottom", "toSide": "top" },
-    { "id": "service-to-llm", "from": "service", "to": "llm", "label": "3 complete / stream", "variant": "emphasis" },
-    { "id": "llm-to-anthropic", "from": "llm", "to": "anthropic", "label": "1st try", "variant": "emphasis" },
-    { "id": "llm-to-openai", "from": "llm", "to": "openai", "label": "on failure", "variant": "dashed" }
+    {
+      "id": "ui-to-sessions",
+      "from": "ui",
+      "to": "sessions",
+      "label": "multipart HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sessions-to-guard",
+      "from": "sessions",
+      "to": "guard",
+      "label": "Depends",
+      "variant": "emphasis"
+    },
+    {
+      "id": "client-to-router",
+      "from": "apiclient",
+      "to": "router",
+      "label": "JSON / SSE"
+    },
+    {
+      "id": "router-to-guard",
+      "from": "router",
+      "to": "guard",
+      "label": "Depends",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "attachments-to-guard",
+      "from": "attachments",
+      "to": "guard",
+      "label": "attachment text",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "guard-to-service",
+      "from": "guard",
+      "to": "service",
+      "label": "sanitized text",
+      "variant": "emphasis"
+    },
+    {
+      "id": "service-to-cache",
+      "from": "service",
+      "to": "cache",
+      "label": "1 lookup / store",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "service-to-prompts",
+      "from": "service",
+      "to": "prompts",
+      "label": "2 render",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "service-to-store",
+      "from": "service",
+      "to": "store",
+      "label": "history + facts",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "service-to-llm",
+      "from": "service",
+      "to": "llm",
+      "label": "3 complete / stream",
+      "variant": "emphasis"
+    },
+    {
+      "id": "service-to-extractor",
+      "from": "service",
+      "to": "extractor",
+      "label": "update facts",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "extractor-to-llm",
+      "from": "extractor",
+      "to": "llm",
+      "label": "JSON facts",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "llm-to-anthropic",
+      "from": "llm",
+      "to": "anthropic",
+      "label": "1st try",
+      "variant": "emphasis"
+    },
+    {
+      "id": "llm-to-openai",
+      "from": "llm",
+      "to": "openai",
+      "label": "on failure",
+      "variant": "dashed"
+    }
   ],
   "cards": [
     {
       "dot": "amber",
-      "title": "One request",
+      "title": "Stateless request",
       "items": [
         "Guardrails run before the handler, so a rejection is a 400, never an SSE error",
         "A cache hit skips the prompt and the LLM",
@@ -155,11 +501,20 @@
       ]
     },
     {
+      "dot": "violet",
+      "title": "Session turn",
+      "items": [
+        "The UI sends every turn through a session; attachments become text before the guardrails",
+        "No cache: the prompt also carries the history window and the project facts",
+        "After the answer, the turn is recorded and a second LLM call refreshes the facts"
+      ]
+    },
+    {
       "dot": "cyan",
       "title": "CAG prompt",
       "items": [
         "Static rules + few-shot examples first, so the provider can cache them",
-        "The description only goes in the user message"
+        "Known project facts go in a trailing block; the description only goes in the user message"
       ]
     },
     {
@@ -167,7 +522,8 @@
       "title": "Opt-in features",
       "items": [
         "Exact and semantic cache need Redis (CACHE_ENABLED, SEMANTIC_CACHE_ENABLED)",
-        "Semantic cache and moderation call OpenAI through LiteLLM"
+        "Semantic cache and moderation call OpenAI through LiteLLM",
+        "Sessions live in one process: a restart loses them"
       ]
     }
   ]

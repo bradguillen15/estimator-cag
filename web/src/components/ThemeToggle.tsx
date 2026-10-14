@@ -6,9 +6,10 @@ import type { SegmentOption } from './SegmentedControl'
 interface ThemeToggleProps {
   value: Theme
   onChange: (theme: Theme) => void
+  compact?: boolean
 }
 
-export function ThemeToggle({ value, onChange }: ThemeToggleProps) {
+export function ThemeToggle({ value, onChange, compact }: ThemeToggleProps) {
   const t = useT()
 
   const options: SegmentOption<Theme>[] = [
@@ -33,5 +34,5 @@ export function ThemeToggle({ value, onChange }: ThemeToggleProps) {
     },
   ]
 
-  return <SegmentedControl name="theme" label={t('theme.label')} value={value} options={options} onChange={onChange} />
+  return <SegmentedControl name="theme" label={t('theme.label')} value={value} options={options} onChange={onChange} compact={compact} />
 }

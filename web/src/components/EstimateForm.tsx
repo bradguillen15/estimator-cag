@@ -1,36 +1,96 @@
 import { useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { ChangeEvent, DragEvent, FormEvent, KeyboardEvent } from 'react'
 
-import { DESCRIPTION_MAX, DESCRIPTION_MIN } from '../api/types'
+import { DESCRIPTION_MAX, DESCRIPTION_MIN, MAX_ATTACHMENTS } from '../api/types'
 import type { DetailLevel, EstimationInput, OutputFormat, ProjectType } from '../api/types'
 import { useLocale, useT } from '../i18n/useLocale'
 import { detailLevelOptions, outputFormatOptions, projectTypeOptions } from '../i18n/messages'
-import { Chevron } from './icons'
+import { Chevron, Paperclip } from './icons'
 
 interface EstimateFormProps {
   busy: boolean
-  onSubmit: (input: EstimationInput) => void
+  onSubmit: (input: EstimationInput, files: File[]) => void
+  /** The session already has turns: the form reads as a follow-up composer. */
+  followUp?: boolean
+  /** Bump to clear the typed text and attachments (the options stay), e.g. after a successful send. */
+  resetKey?: number
 }
 
-export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
+export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }: EstimateFormProps) {
   const t = useT()
   const locale = useLocale()
   const [description, setDescription] = useState('')
   const [projectType, setProjectType] = useState<ProjectType>('mobile_app')
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('medium')
   const [outputFormat, setOutputFormat] = useState<OutputFormat>('phases_table')
+  const [files, setFiles] = useState<File[]>([])
+  const [capped, setCapped] = useState(false)
+  const [rejected, setRejected] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [seenResetKey, setSeenResetKey] = useState(resetKey)
+
+  if (seenResetKey !== resetKey) {
+    // Adjusting state during render: clears the draft without remounting (options are kept).
+    setSeenResetKey(resetKey)
+    setDescription('')
+    setFiles([])
+    setCapped(false)
+    setRejected(false)
+  }
 
   const length = description.trim().length
   const valid = length >= DESCRIPTION_MIN && length <= DESCRIPTION_MAX
 
   const submit = () => {
     if (!valid || busy) return
-    onSubmit({
-      description: description.trim(),
-      project_type: projectType,
-      detail_level: detailLevel,
-      output_format: outputFormat,
-    })
+    onSubmit(
+      {
+        description: description.trim(),
+        project_type: projectType,
+        detail_level: detailLevel,
+        output_format: outputFormat,
+      },
+      files,
+    )
+  }
+
+  const addFiles = (picked: File[]) => {
+    // Drops bypass the input's `accept`, so filter here for both paths.
+    const supported = picked.filter(isSupported)
+    setRejected(supported.length < picked.length)
+    const merged = [...files, ...supported]
+    setCapped(merged.length > MAX_ATTACHMENTS)
+    setFiles(merged.slice(0, MAX_ATTACHMENTS))
+  }
+
+  const pickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(event.target.files ?? []))
+    event.target.value = '' // allow picking the same file again after removing it
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDragging(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    // Ignore leave events fired when the pointer moves onto a child element.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setDragging(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setDragging(false)
+    addFiles(Array.from(event.dataTransfer.files))
+  }
+
+  const removeFile = (index: number) => {
+    setCapped(false)
+    setRejected(false)
+    setFiles((current) => current.filter((_, position) => position !== index))
   }
 
   const handleSubmit = (event: FormEvent) => {
@@ -63,9 +123,52 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
         onChange={(event) => setDescription(event.target.value)}
         onKeyDown={handleKeyDown}
         maxLength={DESCRIPTION_MAX}
-        placeholder={t('form.placeholder')}
-        className={`${CONTROL} block min-h-[150px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
+        placeholder={t(followUp ? 'form.placeholder.followUp' : 'form.placeholder')}
+        className={`${CONTROL} block min-h-[120px] resize-y px-3.5 py-3 leading-relaxed placeholder:text-faint`}
       />
+
+      <div className="mt-5">
+        <label htmlFor="attachments" className="mb-2 block text-[13px] font-medium">
+          {t('form.attachments')}
+        </label>
+        <input id="attachments" type="file" multiple accept={ACCEPT} onChange={pickFiles} className="peer sr-only" />
+        <label
+          htmlFor="attachments"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          data-dragging={dragging || undefined}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-[14px] border border-dashed border-line-strong bg-field px-3 py-3.5 text-[13px] text-muted transition-[background-color,border-color,color] duration-150 ease-out-strong peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent hover:border-accent hover:text-ink data-dragging:border-accent data-dragging:bg-accent-soft data-dragging:text-ink"
+        >
+          <Paperclip className="size-4 flex-none" />
+          <span>
+            {t('form.attachments.drop')} <span className="font-medium text-accent">{t('form.attachments.browse')}</span>
+          </span>
+        </label>
+        <p className={`mt-1.5 text-xs ${capped || rejected ? 'text-danger' : 'text-faint'}`}>
+          {rejected ? t('form.attachments.unsupported') : t('form.attachments.hint', { max: MAX_ATTACHMENTS })}
+        </p>
+        {files.length > 0 && (
+          <ul className="mt-2 grid gap-1.5">
+            {files.map((file, index) => (
+              <li
+                key={`${file.name}-${index}`}
+                className="flex items-center justify-between gap-3 rounded-[10px] bg-field px-3 py-1.5 font-mono text-xs shadow-[0_0_0_1px_var(--line)]"
+              >
+                <span className="truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  aria-label={t('form.attachments.remove', { name: file.name })}
+                  className="cursor-pointer text-muted hover:text-danger focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="mt-5 grid gap-3.5 md:grid-cols-3">
         <Select
@@ -106,11 +209,17 @@ export function EstimateForm({ busy, onSubmit }: EstimateFormProps) {
               className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent [animation-duration:600ms]"
             />
           )}
-          {busy ? t('form.submitting') : t('form.submit')}
+          {busy ? t('form.submitting') : t(followUp ? 'form.submit.followUp' : 'form.submit')}
         </button>
       </div>
     </form>
   )
+}
+
+const ACCEPT = '.pdf,.docx'
+
+function isSupported(file: File): boolean {
+  return /\.(pdf|docx)$/i.test(file.name)
 }
 
 const CONTROL =

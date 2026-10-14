@@ -20,6 +20,8 @@ wheels/
 # Test coverage
 .coverage
 htmlcov/
+coverage/
+web/coverage/
 
 # JS dependencies (pnpm workspace). npm/yarn lockfiles must never be committed.
 node_modules/

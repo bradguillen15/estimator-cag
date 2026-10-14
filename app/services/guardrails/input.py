@@ -137,6 +137,15 @@ def redact_pii(text: str) -> tuple[str, dict[str, int]]:
     return text, {kind: n for kind, n in counts.items() if n}
 
 
+def prompt_injection_pattern(text: str) -> int | None:
+    """Index of the first injection pattern that matches ``text``, or ``None`` if it looks clean."""
+    normalized = _normalize_for_injection(text)
+    for index, pattern in enumerate(_PROMPT_INJECTION_PATTERNS):
+        if pattern.search(normalized):
+            return index
+    return None
+
+
 class InputGuardrails:
     """Validates and sanitizes a description. ``check`` returns the text the LLM may see."""
 
@@ -153,11 +162,10 @@ class InputGuardrails:
 
     @staticmethod
     def _reject_prompt_injection(description: str) -> None:
-        normalized = _normalize_for_injection(description)
-        for index, pattern in enumerate(_PROMPT_INJECTION_PATTERNS):
-            if pattern.search(normalized):
-                logger.warning("input_rejected", reason="prompt_injection", pattern_index=index)
-                raise InputRejectedError(_INJECTION_MESSAGE, reason="prompt_injection")
+        index = prompt_injection_pattern(description)
+        if index is not None:
+            logger.warning("input_rejected", reason="prompt_injection", pattern_index=index)
+            raise InputRejectedError(_INJECTION_MESSAGE, reason="prompt_injection")
 
     def _moderate(self, text: str) -> None:
         if self._moderator is None:
