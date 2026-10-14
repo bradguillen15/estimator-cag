@@ -50,7 +50,7 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   both empty). Summarizer prompt versioned under `app/prompts/`; summary failure keeps the previous
   summary (logged, never fails the turn). Expose `anchors_count` and `summary_chars` in session
   detail (+ `types.ts`). Route: delegated writer (multi-file).
-- [ ] T2 — Evals harness. `evals/` at repo root: `golden_dataset.json` (≥6 cases covering
+- [x] T2 — Evals harness. `evals/` at repo root: `golden_dataset.json` (≥6 cases covering
   detail/format/language and an insufficient-info case), metrics (schema adherence via the output
   guardrail check, cost/hours bounds parsed from the Markdown total, content recall of expected
   keywords), `run_all_metrics`, CLI `uv run python -m evals.run` (real provider, report to stdout,
@@ -88,13 +88,18 @@ T1 (history compression):
 
 _Updated after each task with commit id and checks._
 
-- T1 done (route: delegated writer). Window stays pure: `add_turn` returns evicted `TurnPair`s;
+- T1 done (route: delegated writer), commit `8e1b23c`. Window stays pure: `add_turn` returns evicted `TurnPair`s;
   `HistoryCompressor` (`services/history_compression.py`, EN/ES regex) keeps anchors or folds via
   `ConversationSummarizer` (`services/summarizer.py`, prompt `prompts/summary/v1`). Memory renders as
   trailing `history_memory.j2` block (absent when empty; byte-identical test). Detail route exposes
   `anchors_count`/`summary_chars` (+ `types.ts`). Checks: `uv run pytest` green; `pnpm lint`,
   `pnpm build`, `pnpm test:web` green.
+- T2 done (route: delegated writer). `evals/` (dataset.py pydantic, metrics.py, run.py, 7-case
+  golden_dataset.json); the runner builds `EstimationService` with no caches (NoOp), so every case
+  hits the model; no new settings. Metrics parse the Markdown total; insufficient-info case expects
+  the heading and no total. `pnpm evals` script, README + AGENTS updated. Checks: `uv run pytest`
+  green (382); `python -m evals.run --help` makes no API call.
 
 ## Next step
 
-T2.
+T3.

@@ -172,12 +172,29 @@ Tests never call a real LLM or Redis. The pre-commit hook runs the same checks a
 LLM answers from the prompt it receives, so they prove that context reaches the model and flows
 across turns, not how well a real model uses it.
 
+## Evals
+
+A golden dataset (`evals/golden_dataset.json`: varied project types, detail levels, formats, ES and EN,
+plus an insufficient-information case) is run through the real estimation pipeline and scored with
+deterministic metrics: schema adherence (the production output check), total hours within the case
+bounds (parsed from the Markdown total) and keyword recall.
+
+```bash
+pnpm evals                                         # all cases
+uv run python -m evals.run --case mobile-delivery-detailed-en --threshold 0.8 --prompt-version v3
+```
+
+**Cost warning:** every case is a real, billed LLM call using your `.env` keys and `LLM_MODELS`.
+The response caches are never used, so each run reaches the model. The command exits non-zero when
+the aggregate score is below `--threshold` (default 0.8). `pytest` never runs evals.
+
 ## Project structure
 
 ```
 app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails), prompts
 web/src/        # React UI: api client, components, hooks
 tests/          # pytest
+evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool)
 scripts/        # dev runner and CI scripts
 docs/           # architecture diagrams, screenshots, sample descriptions
 ```

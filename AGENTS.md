@@ -90,6 +90,8 @@ app/
 
 tests/                   # pytest: prompts, schemas, provider (patched litellm.completion), service, routes
 
+evals/                   # Dev tool: golden_dataset.json, dataset.py, metrics.py, run.py (`pnpm evals`). May import app.*; app/ never imports evals
+
 web/src/                 # React UI — talks to the API over HTTP only, never imports Python
 ├── api/                 # client.ts (fetch + SSE parser) and types.ts (mirror of app/schemas)
 ├── components/          # Presentational pieces; no fetch calls here
@@ -387,6 +389,7 @@ pnpm test                # both suites from the repo root (API first, then UI)
 pnpm test:api            # uv run pytest  (tests/)
 pnpm test:web            # vitest run     (web/src/**/*.test.ts[x])
 pnpm test:watch          # vitest in watch mode (UI)
+pnpm evals               # uv run python -m evals.run: REAL, billed LLM calls on the golden dataset; never part of pytest/CI
 pnpm test:coverage       # pytest --cov=app + vitest --coverage (HTML report: web/coverage/index.html)
 ```
 
