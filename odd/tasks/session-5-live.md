@@ -1,0 +1,100 @@
+# Session 05 live: compression, evals, Actor-Critic-Boss, audience tier
+
+## Objective
+
+Port the four functional additions of the reference course branch `ai-engineering`
+`origin/session_05_live` (estimator/) into estimator-cag, adapted to this codebase's layers
+(AGENTS.md), on branch `session_5_live`, one commit per feature.
+
+## Why
+
+A comparison against `session_05_live` showed estimator-cag lacks: history compression (overflowing
+turns are hard-deleted in `ConversationHistory.add_turn`, losing commitments such as an NDA or a
+frozen budget), an evals harness (no regression signal when prompts/models change), a critic loop
+(output checks are deterministic only), and audience-aware output.
+
+## Scope
+
+- In: the four features below, their settings, tests, README/AGENTS updates, `types.ts` mirror for
+  any schema field the UI receives.
+- Out: UI controls for ACB or tier, persistence of sessions, LLM-based anchor classifier, session
+  TTL/eviction, the small session_5 gaps (per-page PDF tolerance, extractor retries).
+
+## Constraints
+
+- Layer rules from `AGENTS.md`: no FastAPI in services, `litellm` only under `services/llm/`,
+  env reads only in `config.py`, collaborators injected via `dependencies.py`.
+- Keep the static system-prompt prefix cacheable: every new prompt block is a **trailing**,
+  conditional block; when a feature is inactive the rendered v3 prompt is byte-identical to today
+  (so no prompt version bump).
+- Tests never reach a real LLM (`conftest.py` blocks it); fakes only.
+- `.env.example` is not readable/writable by the agent: new settings are listed below for the user.
+- Commits: Conventional Commits, no AI attribution, run with Node 24 first in PATH
+  (`~/.nvm/versions/node/v24.21.0/bin`) so the Husky hook passes. Never `--no-verify`.
+
+## Workflow settings
+
+- TDD: off (no project/session TDD config; source: none). Ordinary functional checks per task.
+- Runner: `uv run pytest` (API), `pnpm test:web` + `pnpm lint` + `pnpm build` when `web/` changes.
+- RDD: off (global), so no native review.
+- Delivery strategy: ask-on-risk; forecast ~1,600 authored lines across 4 commits on one branch.
+  Push/PR are the user's decision.
+
+## Tasks
+
+- [x] T1 — History compression. On window overflow the oldest turn pair is peeled off: if the
+  user message matches an anchor regex (NDA, signed contract, scope frozen, budget locked/approved,
+  compliance/regulatory, hard deadline, contractual, explicit commitment; EN + ES) it is kept
+  verbatim in `anchors` (capped, oldest anchor dropped beyond the cap); otherwise it is folded into
+  a cumulative LLM summary. Anchors + summary render as a trailing system-prompt block (absent when
+  both empty). Summarizer prompt versioned under `app/prompts/`; summary failure keeps the previous
+  summary (logged, never fails the turn). Expose `anchors_count` and `summary_chars` in session
+  detail (+ `types.ts`). Route: delegated writer (multi-file).
+- [ ] T2 — Evals harness. `evals/` at repo root: `golden_dataset.json` (≥6 cases covering
+  detail/format/language and an insufficient-info case), metrics (schema adherence via the output
+  guardrail check, cost/hours bounds parsed from the Markdown total, content recall of expected
+  keywords), `run_all_metrics`, CLI `uv run python -m evals.run` (real provider, report to stdout,
+  non-zero exit below a threshold). Tests with a fake provider. Route: delegated writer.
+- [ ] T3 — Actor-Critic-Boss. Critic (cheap model, `CRITIC_MODEL`, falls back to the main chain)
+  audits the Markdown estimate and returns structured feedback (verdict accept / needs_iteration /
+  reject; issues with category, severity, message); Boss is a pure state machine
+  (`BOSS_MAX_ITERATIONS`, default 3) that re-calls the actor with a trailing `critic_feedback`
+  block, returning the final estimate plus the iteration trail. New endpoint
+  `POST /api/v1/estimate/acb` (input guardrails via `get_safe_request`). Critic failure → accept
+  the actor output (logged). Route: delegated writer.
+- [ ] T4 — Audience tier. Pure regex resolver (precedence: explicit request field > NDA/regulatory
+  → executive > ≥2 dev keywords → developer > small team (≤2) → developer... final rule set
+  documented in code) returning tier + rule name; trailing `audience` block (absent for `default`).
+  Optional `audience` field on estimate + session requests; resolved tier/rule exposed on the
+  session detail and estimate responses (+ `types.ts`). Route: delegated writer.
+
+## Acceptance criteria
+
+- `uv run pytest` green after every commit; `pnpm build` + `pnpm lint` green when `web/` changed.
+- Default request (no anchors/summary, no critic, default tier) renders the same system prompt as
+  before this branch (asserted by a test).
+- README + AGENTS.md describe the new endpoint, settings, and `evals/`.
+
+## New settings (to add to `.env.example` by the user)
+
+T1 (history compression):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `SESSION_MAX_ANCHORS` | `5` | Max turns kept verbatim as commitments per session; the oldest is dropped beyond it (`0` disables anchors). |
+| `SESSION_SUMMARY_MAX_CHARS` | `2000` | Hard cap (min 200) on the running summary of folded turns; also stated to the summarizer. |
+
+## Progress
+
+_Updated after each task with commit id and checks._
+
+- T1 done (route: delegated writer). Window stays pure: `add_turn` returns evicted `TurnPair`s;
+  `HistoryCompressor` (`services/history_compression.py`, EN/ES regex) keeps anchors or folds via
+  `ConversationSummarizer` (`services/summarizer.py`, prompt `prompts/summary/v1`). Memory renders as
+  trailing `history_memory.j2` block (absent when empty; byte-identical test). Detail route exposes
+  `anchors_count`/`summary_chars` (+ `types.ts`). Checks: `uv run pytest` green; `pnpm lint`,
+  `pnpm build`, `pnpm test:web` green.
+
+## Next step
+
+T2.

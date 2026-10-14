@@ -15,9 +15,11 @@ from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.guardrails.input import InputGuardrails
+from app.services.history_compression import HistoryCompressor
 from app.services.llm.base import ModerationProvider
 from app.services.llm.factory import get_embedder, get_llm_provider, get_moderator
 from app.services.sessions import Session, SessionStore
+from app.services.summarizer import ConversationSummarizer
 
 logger = structlog.get_logger()
 
@@ -45,19 +47,21 @@ def _get_moderator() -> ModerationProvider | None:
 
 @lru_cache
 def get_estimation_service() -> EstimationService:
+    provider = get_llm_provider(settings)
     return EstimationService(
-        provider=get_llm_provider(settings),
+        provider=provider,
         guardrails=InputGuardrails(moderator=_get_moderator()),
         cache=get_response_cache(settings),
         semantic_cache=_get_semantic_cache(),
         cache_models=tuple(settings.llm_models),
+        history_compressor=HistoryCompressor(ConversationSummarizer(provider, settings.session_summary_max_chars)),
     )
 
 
 @lru_cache
 def get_session_store() -> SessionStore:
     """One store per process: ``lru_cache`` makes this the process-local session dict."""
-    return SessionStore(max_turns=settings.session_max_turns)
+    return SessionStore(max_turns=settings.session_max_turns, max_anchors=settings.session_max_anchors)
 
 
 def get_session(session_id: str, store: Annotated[SessionStore, Depends(get_session_store)]) -> Session:

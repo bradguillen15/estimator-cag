@@ -58,6 +58,8 @@ export const sessionDetail = (overrides: Partial<SessionDetail> = {}): SessionDe
   project_metadata: METADATA,
   history_turns: 2,
   turns: [sessionTurn()],
+  anchors_count: 0,
+  summary_chars: 0,
   created_at: '2026-01-01T10:00:00Z',
   updated_at: '2026-01-01T11:00:00Z',
   ...overrides,

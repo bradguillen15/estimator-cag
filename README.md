@@ -130,8 +130,15 @@ process memory: a restart forgets them.
 
 **History** is a sliding window of the last `SESSION_MAX_TURNS` turns (default 6; a turn is a
 user message plus the answer). Each call sends the system prompt, rebuilt with the current
-project metadata, then the kept turns, then the new message; older turns are dropped as whole
-pairs. The history keeps the transcript and only a reference to the attachments
+project metadata, then the kept turns, then the new message; older turns leave as whole
+pairs and are compressed instead of lost: a pair whose user message carries a commitment (NDA,
+signed contract, frozen scope, locked budget, compliance regime such as GDPR/HIPAA, hard
+deadline, explicit agreement; English and Spanish patterns) is kept verbatim as an *anchor*
+(at most `SESSION_MAX_ANCHORS`, default 5, oldest dropped first); every other pair is folded
+by a second small LLM call into a running summary capped at `SESSION_SUMMARY_MAX_CHARS`
+(default 2000; a failure keeps the previous summary). Both render as one trailing block of the
+system prompt (`history_memory.j2`), absent until a turn overflows the window, so the cacheable
+prefix is untouched. `GET /sessions/{id}` reports `anchors_count` and `summary_chars`. The history keeps the transcript and only a reference to the attachments
 (`[attachments: spec.pdf]`), not their text: replaying up to 60,000 characters on every later
 call would multiply the cost, and the facts taken from them already live in the metadata.
 

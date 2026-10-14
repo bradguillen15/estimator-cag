@@ -6,7 +6,8 @@ output check -> store. Only answers that completed and passed the output check a
 Session turns (``prepare_session_turn`` + ``generate_for_session``) skip both caches: their
 prompt also carries the session's history and project metadata, which the cache key does not
 cover, so a hit could replay an answer built on another conversation. After the answer, the turn
-is added to the history window and the metadata is updated for the next turn.
+is added to the history window, turns that overflow it are compressed (anchors kept verbatim,
+the rest folded into a summary) and the metadata is updated for the next turn.
 """
 
 from collections.abc import Iterator, Sequence
@@ -23,8 +24,10 @@ from app.services.attachments import Attachment, build_description, display_name
 from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
 from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
+from app.services.history_compression import HistoryCompressor
 from app.services.metadata_extractor import MetadataExtractor
 from app.services.sessions import Session, TurnRecord
+from app.services.summarizer import ConversationSummarizer
 
 __all__ = ["PROMPT_VERSION", "EstimationService", "SessionTurn"]
 
@@ -56,8 +59,10 @@ class EstimationService:
         cache_models: Sequence[str] | None = None,
         semantic_cache: SemanticCache | None = None,
         metadata_extractor: MetadataExtractor | None = None,
+        history_compressor: HistoryCompressor | None = None,
     ) -> None:
         self._provider = provider
+        self._history_compressor = history_compressor or HistoryCompressor(ConversationSummarizer(provider))
         self._metadata_extractor = metadata_extractor or MetadataExtractor(provider)
         self._guardrails = guardrails or InputGuardrails()
         self._cache = cache if cache is not None else NoOpCache()
@@ -141,11 +146,14 @@ class EstimationService:
     ) -> str:
         """One session turn: the history window + the new message, then update history and metadata.
 
-        The system prompt is rebuilt every turn from the current ``project_metadata``. No caching
-        (see the module docstring). A failed metadata extraction keeps the old facts.
+        The system prompt is rebuilt every turn from the current ``project_metadata`` and the memory
+        of the turns that left the window. No caching (see the module docstring). A failed metadata
+        extraction or summary keeps the old facts / summary.
         """
         request = turn.request
-        system, user = render_estimation_prompt(request, prompt_version, project_metadata=session.metadata)
+        system, user = render_estimation_prompt(
+            request, prompt_version, project_metadata=session.metadata, history_memory=session.history.memory
+        )
         messages = [*session.history.to_messages_list(system), {"role": "user", "content": user}]
         text = self._provider.complete_messages(messages)
         self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
@@ -153,7 +161,7 @@ class EstimationService:
         _, history_user = render_estimation_prompt(
             request.model_copy(update={"description": turn.history_description}), prompt_version
         )
-        session.record_turn(
+        evicted = session.record_turn(
             history_user,
             text,
             TurnRecord(
@@ -163,6 +171,7 @@ class EstimationService:
                 prompt_version=prompt_version,
             ),
         )
+        self._history_compressor.compress(session.history, evicted, request.language.value)
         session.metadata = self._metadata_extractor.update(
             session.metadata, request.description, text, request.language.value
         )

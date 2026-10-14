@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 
@@ -9,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFo
 
 from app.exceptions import PromptTemplateError
 from app.schemas.estimations import EstimationRequest
-from app.schemas.sessions import ProjectMetadata
+from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
 
 _PROMPTS_ROOT = Path(__file__).resolve().parent
 
@@ -70,10 +72,19 @@ def render_estimation_examples(version: str = PROMPT_VERSION) -> str:
 
 
 def _system_prompt_with_metadata(
-    version: str, detail_level: str, output_format: str, language: str, metadata: ProjectMetadata
+    version: str,
+    detail_level: str,
+    output_format: str,
+    language: str,
+    metadata: ProjectMetadata,
+    history_memory: HistoryMemory | None = None,
 ) -> str:
-    # Not cached: the metadata changes on every session turn. It is the last block, so the
-    # provider still caches the same static prefix as ``_system_prompt``.
+    # Not cached: the metadata changes on every session turn. The trailing blocks come last, so the
+    # provider still caches the same static prefix as ``_system_prompt``. An empty memory is not
+    # passed at all, which keeps the output identical to a prompt that never heard of it.
+    context: dict[str, object] = {}
+    if history_memory is not None and not history_memory.is_empty():
+        context["history_memory"] = _neutralize(history_memory)
     return _render(
         version,
         "system.j2",
@@ -81,6 +92,22 @@ def _system_prompt_with_metadata(
         output_format=output_format,
         language=language,
         project_metadata=metadata,
+        **context,
+    )
+
+
+_MEMORY_TAG_RE = re.compile(r"<(/?)\s*(conversation_summary|conversation_commitments|commitment)\b", re.IGNORECASE)
+
+
+def _neutralize(memory: HistoryMemory) -> HistoryMemory:
+    """Defuses text that would close the memory tags early (the content comes from user text)."""
+
+    def clean(text: str) -> str:
+        return _MEMORY_TAG_RE.sub(r"<\1 \2", text)
+
+    return HistoryMemory(
+        summary=clean(memory.summary),
+        anchors=[TurnPair(user=clean(a.user), assistant=clean(a.assistant)) for a in memory.anchors],
     )
 
 
@@ -88,6 +115,7 @@ def render_estimation_prompt(
     request: EstimationRequest,
     version: str = PROMPT_VERSION,
     project_metadata: ProjectMetadata | None = None,
+    history_memory: HistoryMemory | None = None,
 ) -> tuple[str, str]:
     """Return ``(system, user)`` prompts ready for the LLM.
 
@@ -95,7 +123,9 @@ def render_estimation_prompt(
     instructions for the requested detail level and output format, and with an instruction to
     answer entirely in ``request.language``. Session requests pass ``project_metadata``: the
     system prompt then closes with a ``<project_metadata>`` block (empty tags on the first turn).
-    Versions whose ``system.j2`` predates the block ignore it.
+    ``history_memory`` (summary + anchors of the turns that left the window) adds one more trailing
+    block, only when non-empty and only together with ``project_metadata``. Versions whose
+    ``system.j2`` predates a block ignore it.
     """
     user = _render(
         version,
@@ -108,7 +138,7 @@ def render_estimation_prompt(
     parameters = (version, request.detail_level.value, request.output_format.value, request.language.value)
     if project_metadata is None:
         return _system_prompt(*parameters), user
-    return _system_prompt_with_metadata(*parameters, project_metadata), user
+    return _system_prompt_with_metadata(*parameters, project_metadata, history_memory), user
 
 
 # Version of the project-metadata extraction prompt (app/prompts/metadata/<version>/).
@@ -142,4 +172,35 @@ def render_metadata_prompt(
         .render(known_facts=known.model_dump_json(), description=description.strip(), estimate=estimate.strip())
         .strip()
     )
+    return system, user
+
+
+# Version of the history-summary prompt (app/prompts/summary/<version>/).
+SUMMARY_PROMPT_VERSION = "v1"
+_MAX_SUMMARY_TURN_CHARS = 4_000  # per message handed to the summarizer
+
+
+@lru_cache
+def _summary_environment(version: str) -> Environment:
+    version_dir = _PROMPTS_ROOT / "summary" / version
+    if not version_dir.is_dir():
+        raise PromptTemplateError(f"Unknown summary prompt version: {version!r}")
+    return _build_environment(version_dir)
+
+
+def render_summary_prompt(
+    previous_summary: str,
+    turns: Sequence[TurnPair],
+    language: str = "es",
+    max_chars: int = 2_000,
+    version: str = SUMMARY_PROMPT_VERSION,
+) -> tuple[str, str]:
+    """Return ``(system, user)`` prompts for the LLM that folds evicted turns into the running summary."""
+    environment = _summary_environment(version)
+    system = environment.get_template("system.j2").render(language=language, max_chars=max_chars).strip()
+    clipped = [
+        TurnPair(user=t.user[:_MAX_SUMMARY_TURN_CHARS], assistant=t.assistant[:_MAX_SUMMARY_TURN_CHARS])
+        for t in turns
+    ]
+    user = environment.get_template("user.j2").render(previous_summary=previous_summary, turns=clipped).strip()
     return system, user

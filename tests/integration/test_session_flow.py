@@ -32,6 +32,7 @@ class ContentAwareProvider:
     """A fake LLM that answers from the prompt it receives.
 
     - Estimate calls: 80 hours if the latest user message mentions SSO, 40 otherwise.
+    - History summary calls (recognised by their system prompt): a fixed one-line summary.
     - Metadata extraction calls (recognised by their system prompt): JSON with the project name
       "Reservas" and, from the second turn on, a team of 3.
     """
@@ -50,6 +51,8 @@ class ContentAwareProvider:
             if self.extractions > 1:
                 facts["assumed_team_size"] = 3
             return json.dumps(facts)
+        if system_prompt.startswith("You maintain the running memory"):
+            return "- booking portal"
         return self.complete_messages(
             [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )

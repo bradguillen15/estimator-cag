@@ -80,3 +80,7 @@ format change the structure, not just the content.
 
 {% include "project_metadata.j2" %}
 {% endif %}
+{% if history_memory is defined %}
+
+{% include "history_memory.j2" %}
+{% endif %}

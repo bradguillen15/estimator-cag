@@ -1,0 +1,16 @@
+<current_summary>
+{{ previous_summary if previous_summary else "(empty)" }}
+</current_summary>
+
+<turns_to_fold>
+{% for pair in turns %}
+<turn>
+<user>
+{{ pair.user }}
+</user>
+<assistant>
+{{ pair.assistant }}
+</assistant>
+</turn>
+{% endfor %}
+</turns_to_fold>

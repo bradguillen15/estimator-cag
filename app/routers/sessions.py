@@ -54,6 +54,8 @@ def get_session_detail(session: CurrentSession) -> SessionDetail:
         session_id=session.session_id,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        anchors_count=len(session.history.anchors),
+        summary_chars=len(session.history.summary),
         turns=[
             SessionTurnView(
                 description=t.description,

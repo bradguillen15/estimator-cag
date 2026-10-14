@@ -79,7 +79,9 @@ app/
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
-    ├── sessions.py             # Session state: sliding-window history + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── sessions.py             # Session state: sliding-window history (returns evicted turns; holds anchors + summary) + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── history_compression.py  # Evicted turns: anchor regex (EN/ES) keeps commitments verbatim, the rest is folded by the summarizer
+    ├── summarizer.py           # Third LLM call (prompts/summary/<version>/): bounded running summary; failure keeps the previous one
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)

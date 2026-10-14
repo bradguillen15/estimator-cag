@@ -83,6 +83,10 @@ export interface SessionDetail {
   history_turns: number
   /** Oldest first; capped by the server's history window. */
   turns: SessionTurnView[]
+  /** Turns kept verbatim after leaving the window (commitments such as an NDA or a frozen scope). */
+  anchors_count: number
+  /** Length of the running summary of the turns folded out of the window. */
+  summary_chars: number
   created_at: string
   updated_at: string
 }
