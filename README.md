@@ -74,13 +74,13 @@ Caches are off by default and fail open: if Redis is down, requests still work, 
 | `GET` | `/health` | `{"status": "ok"}` |
 | `POST` | `/api/v1/estimate` | `EstimationResponse` (`text`, `prompt_version`, `cache_hit`, `audience`, `audience_rule`) |
 | `POST` | `/api/v1/estimate/stream` | SSE events: `token`, `done`, `error` |
-| `POST` | `/api/v1/estimate/acb` | `AcbResponse` (`estimation`, `prompt_version`, `final_verdict`, `iterations`): Actor-Critic-Boss, see below |
+| `POST` | `/api/v1/estimate/reviewed` | `ReviewedEstimateResponse` (`estimation`, `prompt_version`, `final_verdict`, `iterations`): critic review loop, see below |
 | `GET` | `/api/v1/context` | The CAG examples in the prompt |
 | `POST` | `/api/v1/sessions` | **201** `{"session_id": "<uuid4>"}` |
 | `GET` | `/api/v1/sessions` | `SessionSummary[]` (sessions with at least one turn, most recent first) |
 | `GET` | `/api/v1/sessions/{session_id}` | `SessionDetail` (`project_metadata`, `history_turns`, `turns`: what was typed + attachment names + estimate per turn, oldest first, capped by the history window); **404** if unknown |
 | `POST` | `/api/v1/sessions/{session_id}/estimate` | `SessionEstimationResponse` (+ `project_metadata`, `history_turns`); `multipart/form-data` with attachments |
-| `POST` | `/api/v1/sessions/{session_id}/estimate/acb` | `SessionAcbResponse` (session turn fields + `final_verdict`, `iterations`): same form as the session estimate, with Actor-Critic-Boss on the session prompt |
+| `POST` | `/api/v1/sessions/{session_id}/estimate/reviewed` | `SessionReviewedEstimateResponse` (session turn fields + `final_verdict`, `iterations`): same form as the session estimate, with the critic review loop on the session prompt |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/estimate \
@@ -130,23 +130,23 @@ The cost: images and diagrams are ignored, and scanned PDFs (no text layer) are 
 and other types are rejected with **400**. An unknown `session_id` is a **404**. Sessions live in
 process memory: a restart forgets them.
 
-**Actor-Critic-Boss** (`POST /estimate/acb`, same body and input guardrails as `/estimate`): the
+**Critic review loop** (`POST /estimate/reviewed`, same body and input guardrails as `/estimate`) (the actor-critic / evaluator-optimizer pattern; the course calls it Actor-Critic-Boss): the
 estimate is audited by a *Critic* (a second LLM call that answers JSON: verdict `accept` |
-`needs_iteration` | `reject`, plus issues with category, severity and message). A *Boss* (pure
-orchestration, `services/boss.py`) re-runs the actor with a trailing `critic_feedback` prompt block
-while the Critic asks for another iteration and `BOSS_MAX_ITERATIONS` (default 3, the maximum number
+`needs_iteration` | `reject`, plus issues with category, severity and message). A *ReviewLoop* (pure
+orchestration, `services/review_loop.py`) re-runs the actor with a trailing `critic_feedback` prompt block
+while the Critic asks for another iteration and `REVIEW_MAX_ITERATIONS` (default 3, the maximum number
 of actor attempts) allows it; `reject` stops at once. The last draft is always returned with
 `final_verdict` (`needs_iteration` means the budget ran out with issues open) and the per-attempt
 `iterations` trail. A `needs_iteration` without a critical/major issue counts as `accept`, and a
 Critic failure (provider error, invalid JSON) accepts the draft and is logged. **Cost: up to
-2 x `BOSS_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
+2 x `REVIEW_MAX_ITERATIONS` LLM calls per request** (one when the first draft is accepted: actor +
 critic). `CRITIC_MODEL` (optional `<provider>/<model>`, e.g. a cheaper one) overrides the model;
 empty reuses `LLM_MODELS`. Both caches are bypassed. No UI yet.
 
-`POST /sessions/{id}/estimate/acb` runs the same Boss on the session conversation (memory, metadata,
+`POST /sessions/{id}/estimate/reviewed` runs the same ReviewLoop on the session conversation (memory, metadata,
 audience and history window in the actor prompt; the `critic_feedback` block is added on retries).
 Only the final estimate is recorded as the turn (history, compression, metadata, `final_verdict` on
-the turn view); drafts are discarded. Same cost: up to 2 x `BOSS_MAX_ITERATIONS` calls plus the
+the turn view); drafts are discarded. Same cost: up to 2 x `REVIEW_MAX_ITERATIONS` calls plus the
 usual per-turn metadata/summary calls.
 
 **Audience tier**: every estimate endpoint (and the session turn form) accepts an optional `audience`

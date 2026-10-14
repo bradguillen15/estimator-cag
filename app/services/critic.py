@@ -1,7 +1,7 @@
 """The Critic: an independent LLM audit of a Markdown estimate.
 
 One extra call per actor attempt, through ``LLMProvider.complete`` (the provider contract does not
-grow). It never mutates anything and never decides what happens next; that is the Boss's job.
+grow). It never mutates anything and never decides what happens next; that is the ReviewLoop's job.
 
 Its issue messages are re-injected into the actor's system prompt and derive from user text, so they get
 the same treatment as extracted metadata: an injection check on every message, a length cap (schema),

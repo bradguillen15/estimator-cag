@@ -8,7 +8,7 @@ from starlette.concurrency import iterate_in_threadpool
 
 from app.dependencies import get_estimation_service, get_prompt_version, get_safe_request
 from app.exceptions import EstimationError
-from app.schemas.acb import AcbResponse
+from app.schemas.review import ReviewedEstimateResponse
 from app.schemas.estimations import (
     EstimationRequest,
     EstimationResponse,
@@ -53,12 +53,12 @@ def create_estimate(body: SafeRequest, service: Service, prompt_version: PromptV
     )
 
 
-@router.post("/estimate/acb", response_model=AcbResponse)
-def create_estimate_acb(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> AcbResponse:
-    """Actor-Critic-Boss: up to 2 x BOSS_MAX_ITERATIONS LLM calls, caches bypassed."""
+@router.post("/estimate/reviewed", response_model=ReviewedEstimateResponse)
+def create_reviewed_estimate(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> ReviewedEstimateResponse:
+    """Critic review loop: up to 2 x REVIEW_MAX_ITERATIONS LLM calls, caches bypassed."""
     result = service.generate_with_critic(body, prompt_version)
     audience = service.resolve_audience(body)
-    return AcbResponse(
+    return ReviewedEstimateResponse(
         estimation=result.estimate,
         prompt_version=prompt_version,
         audience=audience.audience,

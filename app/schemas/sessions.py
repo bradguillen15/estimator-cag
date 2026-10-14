@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.acb import AcbIteration
+from app.schemas.review import ReviewIteration
 from app.schemas.critic import CriticVerdict
 from app.schemas.estimations import Audience, EstimationResponse
 
@@ -55,11 +55,11 @@ class SessionEstimationResponse(EstimationResponse):
     history_turns: int = Field(description="Turns kept in the history window after this one.")
 
 
-class SessionAcbResponse(SessionEstimationResponse):
-    """A session turn produced by Actor-Critic-Boss: the turn fields plus the Critic's verdict and trail."""
+class SessionReviewedEstimateResponse(SessionEstimationResponse):
+    """A session turn produced by the critic review loop: the turn fields plus the Critic's verdict and trail."""
 
     final_verdict: CriticVerdict
-    iterations: list[AcbIteration]
+    iterations: list[ReviewIteration]
 
 
 class SessionSummary(BaseModel):
@@ -80,7 +80,7 @@ class SessionTurnView(BaseModel):
     estimate: str
     prompt_version: str
     cache_hit: bool = False
-    final_verdict: CriticVerdict | None = Field(default=None, description="Set on Actor-Critic-Boss turns only.")
+    final_verdict: CriticVerdict | None = Field(default=None, description="Set on critic-reviewed turns only.")
     created_at: datetime
 
 

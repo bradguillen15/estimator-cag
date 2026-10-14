@@ -166,7 +166,7 @@ def render_estimation_prompt(
     system prompt then closes with a ``<project_metadata>`` block (empty tags on the first turn).
     ``history_memory`` (summary + anchors of the turns that left the window) adds one more trailing
     block, only when non-empty and only together with ``project_metadata``. ``critic_feedback``
-    (the Critic's issues, Actor-Critic-Boss re-attempts, stateless or session) adds a last trailing
+    (the Critic's issues, critic-review re-attempts, stateless or session) adds a last trailing
     block, only when non-empty. ``request.audience`` (the resolved tier;
     see ``services/audience.py``) adds an ``audience`` block after the language one, unless it is
     ``default`` or unset. Versions whose ``system.j2`` predates a

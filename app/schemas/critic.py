@@ -1,4 +1,4 @@
-"""Structured feedback produced by the Critic (the contract between Critic and Boss)."""
+"""Structured feedback produced by the Critic (the contract between Critic and ReviewLoop)."""
 
 from typing import Literal
 

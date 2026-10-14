@@ -13,7 +13,7 @@ Every path resolves the audience tier first (``services/audience.py``) and carri
 request, so the prompt block and both cache keys see the same tier. A non-default tier changes the
 exact key and the semantic bucket, so two tiers never share an answer.
 
-``generate_with_critic`` (Actor-Critic-Boss) also skips both caches and delegates the loop to ``Boss``.
+``generate_with_critic`` (critic review loop) also skips both caches and delegates the loop to ``ReviewLoop``.
 """
 
 from collections.abc import Iterator, Sequence
@@ -25,7 +25,7 @@ import structlog
 from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
 from app.services.audience import AudienceResolution, resolve_audience
-from app.services.boss import Boss, BossResult
+from app.services.review_loop import ReviewLoop, ReviewLoopResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
 from app.services.attachments import Attachment, build_description, display_name
@@ -71,11 +71,11 @@ class EstimationService:
         metadata_extractor: MetadataExtractor | None = None,
         history_compressor: HistoryCompressor | None = None,
         critic: Critic | None = None,
-        boss: Boss | None = None,
+        review_loop: ReviewLoop | None = None,
     ) -> None:
         self._provider = provider
         self._critic = critic or Critic(provider)
-        self._boss = boss or Boss()
+        self._review_loop = review_loop or ReviewLoop()
         self._history_compressor = history_compressor or HistoryCompressor(ConversationSummarizer(provider))
         self._metadata_extractor = metadata_extractor or MetadataExtractor(provider)
         self._guardrails = guardrails or InputGuardrails()
@@ -163,8 +163,8 @@ class EstimationService:
             self._store(key, semantic, CachedAnswer(text=text))
         return text
 
-    def generate_with_critic(self, request: EstimationRequest, prompt_version: str = PROMPT_VERSION) -> BossResult:
-        """Actor-Critic-Boss: the estimate is audited and regenerated until accepted or out of budget.
+    def generate_with_critic(self, request: EstimationRequest, prompt_version: str = PROMPT_VERSION) -> ReviewLoopResult:
+        """Critic review loop: the estimate is audited and regenerated until accepted or out of budget.
 
         Expects a prepared request. Both caches are bypassed: the result depends on the Critic's
         judgement of each attempt, and a cache hit would skip the very loop the caller asked for. The
@@ -178,7 +178,7 @@ class EstimationService:
             system, user = render_estimation_prompt(request, prompt_version, critic_feedback=issues)
             return self._provider.complete(system, user)
 
-        result = self._boss.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        result = self._review_loop.run(actor, lambda estimate: self._critic.review(request.description, estimate))
         self._passes_output_check(request, result.estimate, prompt_version)
         return result
 
@@ -204,8 +204,8 @@ class EstimationService:
         turn: SessionTurn,
         session: Session,
         prompt_version: str = PROMPT_VERSION,
-    ) -> BossResult:
-        """Actor-Critic-Boss on a session turn; only the final estimate is recorded, as a normal turn.
+    ) -> ReviewLoopResult:
+        """Critic review loop on a session turn; only the final estimate is recorded, as a normal turn.
 
         The actor sends what ``generate_for_session`` would (current memory, history window and
         message), plus the ``critic_feedback`` block on retries. The session is not touched until the
@@ -217,7 +217,7 @@ class EstimationService:
             issues = feedback.issues if feedback else None
             return self._provider.complete_messages(self._session_messages(request, session, prompt_version, issues))
 
-        result = self._boss.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        result = self._review_loop.run(actor, lambda estimate: self._critic.review(request.description, estimate))
         self._record_session_turn(turn, request, session, result.estimate, prompt_version, result.final_verdict)
         return result
 

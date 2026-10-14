@@ -13,7 +13,7 @@ from app.schemas.estimations import Audience, DetailLevel, EstimationRequest, Ou
 from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, check_attachment_count
 from app.services.cache.factory import get_response_cache
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, build_semantic_cache
-from app.services.boss import Boss
+from app.services.review_loop import ReviewLoop
 from app.services.critic import Critic
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.guardrails.input import InputGuardrails
@@ -67,7 +67,7 @@ def get_estimation_service() -> EstimationService:
         cache_models=tuple(settings.llm_models),
         history_compressor=HistoryCompressor(ConversationSummarizer(provider, settings.session_summary_max_chars)),
         critic=Critic(_get_critic_provider(provider)),
-        boss=Boss(settings.boss_max_iterations),
+        review_loop=ReviewLoop(settings.review_max_iterations),
     )
 
 

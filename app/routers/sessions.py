@@ -11,7 +11,7 @@ from app.dependencies import (
 )
 from app.schemas.estimations import Audience
 from app.schemas.sessions import (
-    SessionAcbResponse,
+    SessionReviewedEstimateResponse,
     SessionCreatedResponse,
     SessionDetail,
     SessionEstimationResponse,
@@ -96,16 +96,16 @@ def create_session_estimate(
     )
 
 
-@router.post("/sessions/{session_id}/estimate/acb", response_model=SessionAcbResponse)
-def create_session_estimate_acb(
+@router.post("/sessions/{session_id}/estimate/reviewed", response_model=SessionReviewedEstimateResponse)
+def create_session_reviewed_estimate(
     turn: SafeSessionTurn,
     session: CurrentSession,
     service: Service,
     prompt_version: PromptVersion,
-) -> SessionAcbResponse:
-    """Actor-Critic-Boss on the session prompt: up to 2 x BOSS_MAX_ITERATIONS calls, then one recorded turn."""
+) -> SessionReviewedEstimateResponse:
+    """Critic review loop on the session prompt: up to 2 x REVIEW_MAX_ITERATIONS calls, then one recorded turn."""
     result = service.generate_for_session_with_critic(turn, session, prompt_version)
-    return SessionAcbResponse(
+    return SessionReviewedEstimateResponse(
         text=result.estimate,
         prompt_version=prompt_version,
         project_metadata=session.metadata,

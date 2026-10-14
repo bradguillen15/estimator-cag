@@ -113,7 +113,7 @@ class TurnRecord:
     estimate: str
     prompt_version: str
     cache_hit: bool = False  # session turns skip the response caches
-    final_verdict: CriticVerdict | None = None  # set only by Actor-Critic-Boss turns
+    final_verdict: CriticVerdict | None = None  # set only by critic-reviewed turns
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 

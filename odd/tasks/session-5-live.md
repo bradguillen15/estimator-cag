@@ -83,7 +83,15 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   metadata, audience) and then recording the turn exactly like a normal session turn (history,
   compression, metadata extraction, `TurnRecord`), returning the session turn fields + final
   verdict + iterations. Commit `feat(sessions): ...`. Route: delegated writer.
-- [ ] T7b — Frontend: Actor-Critic-Boss. `createSessionAcbEstimate` in `client.ts`, a
+- [x] T7r — Rename "ACB"/"Boss" to descriptive names (user decision: the course jargon is not
+  self-explanatory). `/estimate/acb` → `/estimate/reviewed`, `/sessions/{id}/estimate/acb` →
+  `/sessions/{id}/estimate/reviewed`, `AcbResponse`/`SessionAcbResponse` →
+  `ReviewedEstimateResponse`/`SessionReviewedEstimateResponse`, `boss.py`/`Boss` →
+  `review_loop.py`/`ReviewLoop`, `BOSS_MAX_ITERATIONS` → `REVIEW_MAX_ITERATIONS`; `critic.py`
+  stays. Covers schemas, services, routers, settings, tests, `types.ts`, README, AGENTS.md and the
+  archify diagram (also fixes the review box to cover session turns, pending from T7a). Commit
+  `refactor: ...`. Route: delegated writer.
+- [ ] T7b — Frontend: critic review. `createSessionReviewedEstimate` in `client.ts`, a
   "Revisión con crítico" toggle in the session composer, loading state for the non-streaming call,
   result with final verdict + iteration trail (attempt, verdict, issues by severity). Tests.
   Commit `feat(web): ...`. Route: delegated writer.
@@ -109,7 +117,7 @@ T3 (Actor-Critic-Boss):
 | Setting | Default | Meaning |
 |---|---|---|
 | `CRITIC_MODEL` | empty | Optional single `<provider>/<model>` for the Critic (e.g. a cheaper one). Empty reuses the `LLM_MODELS` chain. An invalid value is logged and falls back to the main chain. |
-| `BOSS_MAX_ITERATIONS` | `3` | Max actor attempts per `/estimate/acb` request (min 1); worst case 2 x N LLM calls. |
+| `REVIEW_MAX_ITERATIONS` | `3` | Max actor attempts per `/estimate/reviewed` request (renamed from `BOSS_MAX_ITERATIONS` in T7r) (min 1); worst case 2 x N LLM calls. |
 
 ## Progress
 
@@ -158,7 +166,8 @@ _Updated after each task with commit id and checks._
   loader now allows feedback together with metadata/memory) and records the turn via `_record_session_turn`, the same
   code as `generate_for_session`. `SessionAcbResponse`; `TurnRecord.final_verdict` -> `SessionTurnView.final_verdict`
   (+ `types.ts`, types only). Diagram `candidate.json` not changed (ACB node now also serves sessions; text not
-  updated). Checks: `uv run pytest` green; lint/build/test:web green. Commit: see git log (T6: `44e6361`).
+  updated). Checks: `uv run pytest` green; lint/build/test:web green. Commit: `f1fdf03`.
+- T7r done (route: delegated writer). Pure rename: `boss.py`/`Boss`/`BossResult` -> `review_loop.py`/`ReviewLoop`/`ReviewLoopResult`; `schemas/acb.py` -> `schemas/review.py` (`ReviewIteration`, `ReviewedEstimateResponse`, `SessionReviewedEstimateResponse`); routes `/estimate/reviewed` and `/sessions/{id}/estimate/reviewed` (no aliases); `BOSS_MAX_ITERATIONS` -> `REVIEW_MAX_ITERATIONS`; log events `review_iteration`/`review_budget_exhausted`; tests renamed to `test_critic_review.py`/`test_session_review.py`; `types.ts`, README, AGENTS.md and diagram updated (review node now covers the session route). Checks: pytest, lint, build, test:web green. T7b: use the new names. Commits: see git log.
 
 ## Next step
 

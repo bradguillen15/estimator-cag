@@ -182,7 +182,7 @@ def test_estimate_without_signals_reports_default(client: TestClient) -> None:
     assert (data["audience"], data["audience_rule"]) == ("default", "default")
 
 
-@pytest.mark.parametrize("path", ["/api/v1/estimate", "/api/v1/estimate/stream", "/api/v1/estimate/acb"])
+@pytest.mark.parametrize("path", ["/api/v1/estimate", "/api/v1/estimate/stream", "/api/v1/estimate/reviewed"])
 def test_an_invalid_audience_is_a_422(client: TestClient, path: str) -> None:
     assert client.post(path, json={**VALID_REQUEST, "audience": "intern"}).status_code == 422
 

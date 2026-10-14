@@ -21,10 +21,10 @@ The interactive diagram of this flow, with file/line sources per node, is
 [viewable here](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html)
 (source: `docs/architecture/estimation-flow/`; see §5.5 to regenerate it).
 
-`POST /api/v1/estimate/acb` runs the same entry (guardrails) then `EstimationService.generate_with_critic`:
-`Boss` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
-(max `BOSS_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
-`POST /api/v1/sessions/{id}/estimate/acb` reuses the same `Boss` with a session actor
+`POST /api/v1/estimate/reviewed` runs the same entry (guardrails) then `EstimationService.generate_with_critic`:
+`ReviewLoop` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
+(max `REVIEW_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
+`POST /api/v1/sessions/{id}/estimate/reviewed` reuses the same `ReviewLoop` with a session actor
 (`generate_for_session_with_critic`): the loop runs on the session prompt and only the final estimate is
 recorded, through the same `_record_session_turn` as a normal turn (verdict kept on the `TurnRecord`).
 
@@ -92,8 +92,8 @@ app/
     ├── sessions.py             # Session state: sliding-window history (returns evicted turns; holds anchors + summary) + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
     ├── audience.py             # Audience tier: pure regex resolver (explicit > compliance > executive > dev keywords > small team > pm) -> (tier, rule); no LLM
     ├── history_compression.py  # Evicted turns: anchor regex (EN/ES) keeps commitments verbatim, the rest is folded by the summarizer
-    ├── critic.py               # Actor-Critic-Boss: LLM audit (prompts/critic/<version>/) -> `CriticFeedback`; any failure = accept (logged)
-    ├── boss.py                 # Actor-Critic-Boss: pure loop (no SDK/HTTP); accept / iterate with feedback / reject / budget exhausted
+    ├── critic.py               # Critic review loop: LLM audit (prompts/critic/<version>/) -> `CriticFeedback`; any failure = accept (logged)
+    ├── review_loop.py         # Critic review loop: pure loop (no SDK/HTTP); accept / iterate with feedback / reject / budget exhausted
     ├── summarizer.py           # Third LLM call (prompts/summary/<version>/): bounded running summary; failure keeps the previous one
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)

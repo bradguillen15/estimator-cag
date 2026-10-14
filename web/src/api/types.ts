@@ -46,22 +46,22 @@ export interface CriticIssue {
   message: string
 }
 
-export interface AcbIteration {
+export interface ReviewIteration {
   /** 1-based actor attempt. */
   attempt: number
   verdict: CriticVerdict
   issues: CriticIssue[]
 }
 
-/** POST /estimate/acb (Actor-Critic-Boss). Mirrored for a future UI; no client function yet. */
-export interface AcbResponse {
+/** POST /estimate/reviewed (critic review loop). Mirrored for a future UI; no client function yet. */
+export interface ReviewedEstimateResponse {
   estimation: string
   prompt_version: string
   audience: Audience
   audience_rule: string
   /** needs_iteration here means the iteration budget ran out with issues still open. */
   final_verdict: CriticVerdict
-  iterations: AcbIteration[]
+  iterations: ReviewIteration[]
 }
 
 export interface PromptContext {
@@ -115,7 +115,7 @@ export interface SessionTurnView {
   estimate: string
   prompt_version: string
   cache_hit: boolean
-  /** Set on Actor-Critic-Boss turns only. */
+  /** Set on critic review loop turns only. */
   final_verdict?: CriticVerdict | null
   created_at: string
 }
@@ -144,10 +144,10 @@ export interface SessionEstimationResponse extends EstimationResponse {
   history_turns: number
 }
 
-/** POST /sessions/{id}/estimate/acb: the session turn plus the Critic's verdict and trail. Types only; no client function yet. */
-export interface SessionAcbResponse extends SessionEstimationResponse {
+/** POST /sessions/{id}/estimate/reviewed: the session turn plus the Critic's verdict and trail. Types only; no client function yet. */
+export interface SessionReviewedEstimateResponse extends SessionEstimationResponse {
   final_verdict: CriticVerdict
-  iterations: AcbIteration[]
+  iterations: ReviewIteration[]
 }
 
 export const DESCRIPTION_MIN = 20
