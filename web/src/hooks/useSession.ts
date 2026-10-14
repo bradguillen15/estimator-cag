@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ApiError, createSession, createSessionEstimate, getSession, listSessions } from '../api/client'
 import { EMPTY_PROJECT_METADATA } from '../api/types'
-import type { EstimationRequest, GenerationMeta, ProjectMetadata, SessionDetail, SessionSummary } from '../api/types'
+import type { Audience, EstimationRequest, GenerationMeta, ProjectMetadata, SessionDetail, SessionSummary } from '../api/types'
 
 /** One finished exchange: what the user sent and the estimate that came back. */
 export interface ThreadTurn {
@@ -21,12 +21,29 @@ export interface PendingTurn {
   error: string | null
 }
 
+/** What the server remembers beyond the sliding window, plus the tier of the latest turn. */
+export interface SessionMemory {
+  anchors: number
+  summaryChars: number
+  audience: Audience | null
+  audienceRule: string | null
+}
+
 export interface SessionInfo {
   /** Null while the session is being created (or creation failed). */
   id: string | null
   metadata: ProjectMetadata
   turns: number
+  /** Absent until known (new or just-created sessions). */
+  memory?: SessionMemory
 }
+
+const memoryOf = (detail: SessionDetail): SessionMemory => ({
+  anchors: detail.anchors_count,
+  summaryChars: detail.summary_chars,
+  audience: detail.last_audience,
+  audienceRule: detail.last_audience_rule,
+})
 
 const NO_SESSION: SessionInfo = { id: null, metadata: EMPTY_PROJECT_METADATA, turns: 0 }
 
@@ -58,6 +75,14 @@ const toThreadTurns = (detail: SessionDetail): ThreadTurn[] =>
     text: turn.estimate,
     meta: { prompt_version: turn.prompt_version, cache_hit: turn.cache_hit },
   }))
+
+/** Per-turn audience is not stored: only the latest turn's tier is known on a rebuilt thread. */
+const withLastAudience = (turns: ThreadTurn[], detail: SessionDetail): ThreadTurn[] =>
+  turns.map((turn, index) =>
+    index === turns.length - 1 && detail.last_audience && turn.meta
+      ? { ...turn, meta: { ...turn.meta, audience: detail.last_audience, audience_rule: detail.last_audience_rule ?? undefined } }
+      : turn,
+  )
 
 /**
  * Conversation-scoped estimation: owns one server session, resumes the last one from
@@ -105,8 +130,8 @@ export function useSession() {
   const adopt = useCallback((detail: SessionDetail) => {
     sessionIdRef.current = detail.session_id
     writeStoredSessionId(detail.session_id)
-    setSession({ id: detail.session_id, metadata: detail.project_metadata, turns: detail.history_turns })
-    setTurns(toThreadTurns(detail))
+    setSession({ id: detail.session_id, metadata: detail.project_metadata, turns: detail.history_turns, memory: memoryOf(detail) })
+    setTurns(withLastAudience(toThreadTurns(detail), detail))
     setPending(null)
     setError(null)
   }, [])
@@ -117,6 +142,18 @@ export function useSession() {
       setSessions(await listSessions())
     } catch {
       // Keep the previous list.
+    }
+  }, [])
+
+  /** Best effort, like the list: anchors/summary live only in the session detail. */
+  const refreshMemory = useCallback(async (id: string, signal: AbortSignal) => {
+    try {
+      const detail = await getSession(id, signal)
+      if (signal.aborted || sessionIdRef.current !== id) return
+      const memory = memoryOf(detail)
+      setSession((current) => (current.id === id ? { ...current, memory } : current))
+    } catch {
+      // Keep the previous memory.
     }
   }, [])
 
@@ -189,12 +226,29 @@ export function useSession() {
           {
             ...sent,
             text: response.text,
-            meta: { prompt_version: response.prompt_version, cache_hit: response.cache_hit },
+            meta: {
+              prompt_version: response.prompt_version,
+              cache_hit: response.cache_hit,
+              audience: response.audience,
+              audience_rule: response.audience_rule,
+            },
           },
         ])
         setPending(null)
-        setSession({ id, metadata: response.project_metadata, turns: response.history_turns })
+        setSession((current) => ({
+          id,
+          metadata: response.project_metadata,
+          turns: response.history_turns,
+          // Anchors/summary only come with the session detail (refreshed below); keep the last known ones.
+          memory: {
+            anchors: current.memory?.anchors ?? 0,
+            summaryChars: current.memory?.summaryChars ?? 0,
+            audience: response.audience,
+            audienceRule: response.audience_rule,
+          },
+        }))
         void refreshSessions()
+        void refreshMemory(id, signal)
         return true
       } catch (error) {
         if (isAbort(error) || signal.aborted) return false
@@ -202,7 +256,7 @@ export function useSession() {
         return false
       }
     },
-    [abortInFlight, startSession, refreshSessions],
+    [abortInFlight, startSession, refreshSessions, refreshMemory],
   )
 
   const newConversation = useCallback(async () => {

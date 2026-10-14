@@ -97,6 +97,7 @@ export async function createSessionEstimate(
   form.append('detail_level', request.detail_level)
   form.append('output_format', request.output_format)
   form.append('language', request.language)
+  if (request.audience) form.append('audience', request.audience)
   for (const file of files) form.append('attachments', file)
 
   const response = await send(`/api/v1/sessions/${encodeURIComponent(sessionId)}/estimate`, {

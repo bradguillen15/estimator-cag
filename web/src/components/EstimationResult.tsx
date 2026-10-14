@@ -85,6 +85,14 @@ function MetaChips({ meta }: { meta: GenerationMeta }) {
   const t = useT()
   return (
     <div className="flex flex-wrap gap-1.5">
+      {meta.audience && (
+        <span
+          title={meta.audience_rule ? t('result.audience.rule', { rule: meta.audience_rule }) : undefined}
+          className="rounded-full bg-field px-[9px] py-[3px] text-[11.5px] text-muted shadow-[0_0_0_1px_var(--line)]"
+        >
+          {t('result.audience', { audience: t(`audience.${meta.audience}`) })}
+        </span>
+      )}
       {meta.cache_hit && (
         <span className="rounded-full bg-accent-soft px-[9px] py-[3px] font-mono text-[11.5px] font-medium text-accent shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_30%,transparent)]">
           {t('result.cached')}

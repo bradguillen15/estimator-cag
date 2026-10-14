@@ -82,6 +82,19 @@ describe('EstimateForm', () => {
     )
   })
 
+  it('omits the audience when left on automatic and sends the chosen tier otherwise', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    await user.type(description, DESCRIPTION)
+
+    expect(screen.getByLabelText('Audiencia')).toHaveValue('auto')
+    await user.click(submit)
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('audience')
+
+    await user.selectOptions(screen.getByLabelText('Audiencia'), 'Ejecutivo')
+    await user.click(submit)
+    expect(onSubmit.mock.calls[1][0]).toHaveProperty('audience', 'executive')
+  })
+
   it('shows English labels when the locale is English', async () => {
     const { user, description, submit, onSubmit } = setup(false, 'en')
 

@@ -88,10 +88,15 @@ describe('useSession', () => {
         description: REQUEST.description,
         attachmentNames: ['a.pdf'],
         text: '## Estimación',
-        meta: { prompt_version: 'v1', cache_hit: false },
+        meta: { prompt_version: 'v1', cache_hit: false, audience: 'default', audience_rule: 'default' },
       },
     ])
-    expect(result.current.session).toEqual({ id: 's1', metadata: METADATA, turns: 2 })
+    expect(result.current.session).toEqual({
+      id: 's1',
+      metadata: METADATA,
+      turns: 2,
+      memory: { anchors: 0, summaryChars: 0, audience: 'default', audienceRule: 'default' },
+    })
     expect(estimateMock).toHaveBeenCalledWith('s1', REQUEST, files, expect.any(AbortSignal))
   })
 
@@ -123,7 +128,7 @@ describe('useSession', () => {
     expect(estimateMock).toHaveBeenNthCalledWith(1, 's1', REQUEST, [], expect.any(AbortSignal))
     expect(estimateMock).toHaveBeenNthCalledWith(2, 's2', REQUEST, [], expect.any(AbortSignal))
     expect(result.current.turns).toHaveLength(1)
-    expect(result.current.session).toEqual({ id: 's2', metadata: METADATA, turns: 1 })
+    expect(result.current.session).toMatchObject({ id: 's2', metadata: METADATA, turns: 1 })
   })
 
   it('gives up when the retry also fails', async () => {
@@ -232,7 +237,7 @@ describe('useSession', () => {
 
     await waitFor(() => expect(result.current.session.id).toBe('old'))
     expect(createSessionMock).not.toHaveBeenCalled()
-    expect(result.current.session).toEqual({ id: 'old', metadata: METADATA, turns: 3 })
+    expect(result.current.session).toEqual({ id: 'old', metadata: METADATA, turns: 3, memory: { anchors: 0, summaryChars: 0, audience: null, audienceRule: null } })
     expect(result.current.turns).toEqual([
       {
         description: 'Portal interno para reservar salas.',
@@ -254,6 +259,24 @@ describe('useSession', () => {
     expect(result.current.turns).toEqual([])
   })
 
+  it('refreshes anchors and summary from the session detail after a turn, keeping them if that fails', async () => {
+    estimateMock.mockResolvedValue(sessionEstimate({ audience: 'executive', audience_rule: 'compliance' }))
+    const { result } = await mounted()
+    getSessionMock.mockResolvedValue(
+      sessionDetail({ session_id: 's1', anchors_count: 2, summary_chars: 340, last_audience: 'executive', last_audience_rule: 'compliance' }),
+    )
+
+    await act(() => result.current.run(REQUEST, []))
+
+    await waitFor(() =>
+      expect(result.current.session.memory).toEqual({ anchors: 2, summaryChars: 340, audience: 'executive', audienceRule: 'compliance' }),
+    )
+
+    getSessionMock.mockRejectedValue(new ApiError('down'))
+    await act(() => result.current.run(REQUEST, []))
+    expect(result.current.session.memory).toEqual({ anchors: 2, summaryChars: 340, audience: 'executive', audienceRule: 'compliance' })
+  })
+
   it('selectSession loads the detail: memory and the turns, replacing the current thread', async () => {
     estimateMock.mockResolvedValue(sessionEstimate())
     const { result } = await mounted()
@@ -271,11 +294,12 @@ describe('useSession', () => {
 
     await act(() => result.current.selectSession('other'))
 
-    expect(result.current.session).toEqual({ id: 'other', metadata: METADATA, turns: 2 })
+    expect(result.current.session).toEqual({ id: 'other', metadata: METADATA, turns: 2, memory: { anchors: 0, summaryChars: 0, audience: null, audienceRule: null } })
     expect(result.current.turns.map((turn) => [turn.description, turn.text, turn.attachmentNames])).toEqual([
       ['a', 'A', ['spec.pdf']],
       ['b', 'B', []],
     ])
+    expect(result.current.turns[0].meta).toEqual({ prompt_version: 'v3', cache_hit: false })
     expect(result.current.turns[1].meta).toEqual({ prompt_version: 'v3', cache_hit: true })
     expect(localStorage.getItem('estimator.sessionId')).toBe('other')
   })

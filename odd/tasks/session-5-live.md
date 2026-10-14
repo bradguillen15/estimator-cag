@@ -71,6 +71,15 @@ frozen budget), an evals harness (no regression signal when prompts/models chang
   `docs/architecture/estimation-flow/` (ACB path, compression/tier on session turns); if so update
   `candidate.json` from the code and re-run archify `finalize --repo-root .`, separate commit
   (`docs(architecture): ...`). Route: delegated writer.
+- [x] T6 — Frontend: audience + session memory (added by user request, reverses the earlier
+  "no UI" scope). Audience selector (auto/default + executive/pm/developer) sent on stateless and
+  session estimates; badge showing the resolved audience + rule on each result; session view shows
+  anchors count / summary size / last audience. Spanish UI copy, client.ts only for HTTP, Vitest +
+  RTL tests. Commit `feat(web): ...`. Route: delegated writer.
+- [ ] T7 — Frontend: Actor-Critic-Boss. `estimateAcb` in `client.ts`, a "revisión con crítico"
+  toggle for stateless estimates (session turns have no ACB endpoint → hidden/disabled there),
+  loading state for the non-streaming call, result with final verdict + iteration trail (attempt,
+  verdict, issues by severity). Tests. Commit `feat(web): ...`. Route: delegated writer.
 
 ## Acceptance criteria
 
@@ -130,7 +139,13 @@ _Updated after each task with commit id and checks._
 - T5 done (route: delegated writer). `estimation-flow` overview gained three nodes (Audience tier, Actor-Critic-Boss
   with its Critic, History compression), 5 edges, 2 cards; the router node now covers `/estimate/acb`. All cited line
   ranges re-verified against HEAD `8cfae9b`; archify `finalize --repo-root .` passed (validate, deliver, check,
-  browser-check). Advisory: 3 route crossings near the service node, not visually inspected. Commit: see git log.
+  browser-check). Advisory: 3 route crossings near the service node, not visually inspected. Commit `af98b85`.
+- T6 done (route: delegated writer). UI is session-only (client.ts has no stateless/stream function), so the
+  `audience` form field is sent on session estimates only; selector "Automática/Auto" omits it, not persisted
+  (other options do not persist either). Badge `Para: <tier>` on each result with the rule as tooltip; the
+  session-memory block in the sidebar (anchors, summary chars when >0, last audience) refreshes after each turn via a
+  best-effort `getSession` (no polling). Rebuilt threads show the badge only on the last turn. Checks: lint, build,
+  `pnpm test:web` (105), `uv run pytest` green. Commit: see git log.
 
 ## Next step
 

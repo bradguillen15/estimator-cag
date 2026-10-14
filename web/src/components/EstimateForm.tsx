@@ -2,9 +2,9 @@ import { useState } from 'react'
 import type { ChangeEvent, DragEvent, FormEvent, KeyboardEvent } from 'react'
 
 import { DESCRIPTION_MAX, DESCRIPTION_MIN, MAX_ATTACHMENTS } from '../api/types'
-import type { DetailLevel, EstimationInput, OutputFormat, ProjectType } from '../api/types'
+import type { Audience, DetailLevel, EstimationInput, OutputFormat, ProjectType } from '../api/types'
 import { useLocale, useT } from '../i18n/useLocale'
-import { detailLevelOptions, outputFormatOptions, projectTypeOptions } from '../i18n/messages'
+import { audienceOptions, detailLevelOptions, outputFormatOptions, projectTypeOptions } from '../i18n/messages'
 import { Chevron, Paperclip } from './icons'
 
 interface EstimateFormProps {
@@ -23,6 +23,7 @@ export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }:
   const [projectType, setProjectType] = useState<ProjectType>('mobile_app')
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('medium')
   const [outputFormat, setOutputFormat] = useState<OutputFormat>('phases_table')
+  const [audience, setAudience] = useState<Audience | 'auto'>('auto')
   const [files, setFiles] = useState<File[]>([])
   const [capped, setCapped] = useState(false)
   const [rejected, setRejected] = useState(false)
@@ -49,6 +50,7 @@ export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }:
         project_type: projectType,
         detail_level: detailLevel,
         output_format: outputFormat,
+        ...(audience === 'auto' ? {} : { audience }),
       },
       files,
     )
@@ -170,7 +172,7 @@ export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }:
         )}
       </div>
 
-      <div className="mt-5 grid gap-3.5 md:grid-cols-3">
+      <div className="mt-5 grid gap-3.5 md:grid-cols-2">
         <Select
           id="project_type"
           label={t('form.projectType')}
@@ -191,6 +193,13 @@ export function EstimateForm({ busy, onSubmit, followUp = false, resetKey = 0 }:
           value={outputFormat}
           options={outputFormatOptions(locale)}
           onChange={setOutputFormat}
+        />
+        <Select
+          id="audience"
+          label={t('form.audience')}
+          value={audience}
+          options={audienceOptions(locale)}
+          onChange={setAudience}
         />
       </div>
 

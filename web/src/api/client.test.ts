@@ -49,6 +49,16 @@ describe('createSessionEstimate', () => {
     expect((form.getAll('attachments') as File[]).map((file) => file.name)).toEqual(['a.pdf', 'b.pdf'])
   })
 
+  it('sends the audience only when one was chosen', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(sessionEstimate()))
+
+    await createSessionEstimate('abc', REQUEST, [])
+    await createSessionEstimate('abc', { ...REQUEST, audience: 'executive' }, [])
+
+    expect((fetchMock.mock.calls[0][1]?.body as FormData).has('audience')).toBe(false)
+    expect((fetchMock.mock.calls[1][1]?.body as FormData).get('audience')).toBe('executive')
+  })
+
   it('sends no attachments field when there are no files', async () => {
     fetchMock.mockResolvedValue(jsonResponse(sessionEstimate()))
     await createSessionEstimate('abc', REQUEST, [])

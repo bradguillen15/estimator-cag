@@ -57,6 +57,18 @@ describe('EstimationResult', () => {
     expect(screen.queryByText('cached')).not.toBeInTheDocument()
   })
 
+  it('shows who the answer was framed for, with the resolver rule as tooltip', () => {
+    withLocale(
+      <EstimationResult state={done('Hecho', { ...DONE_META, audience: 'executive', audience_rule: 'compliance_terms' })} />,
+    )
+    expect(screen.getByText('Para: Ejecutivo')).toHaveAttribute('title', 'Regla: compliance_terms')
+  })
+
+  it('shows no audience badge when the turn has none', () => {
+    withLocale(<EstimationResult state={done('Hecho')} />)
+    expect(screen.queryByText(/^Para:/)).not.toBeInTheDocument()
+  })
+
   it('copies the raw Markdown and confirms it', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })

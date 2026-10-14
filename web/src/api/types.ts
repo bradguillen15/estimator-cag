@@ -5,7 +5,7 @@ export type DetailLevel = 'summary' | 'medium' | 'detailed'
 export type OutputFormat = 'phases_table' | 'line_items' | 'narrative'
 /** Language the model answers in. The API falls back to 'es' for anything else. */
 export type ResponseLanguage = 'es' | 'en'
-/** Who reads the estimate. Optional on requests (the API infers it); no UI control yet. */
+/** Who reads the estimate. Optional on requests: omitted, the API infers it. */
 export type Audience = 'executive' | 'pm' | 'developer' | 'default'
 
 /** What the form collects; language (UI + model response) comes from the sidebar. */
@@ -14,11 +14,12 @@ export interface EstimationInput {
   project_type: ProjectType
   detail_level: DetailLevel
   output_format: OutputFormat
+  /** Omitted = automatic: the API infers the tier. */
+  audience?: Audience
 }
 
 export interface EstimationRequest extends EstimationInput {
   language: ResponseLanguage
-  audience?: Audience
 }
 
 export interface EstimationResponse {
@@ -73,6 +74,9 @@ export interface GenerationMeta {
   prompt_version: string
   /** True when the answer was served from the response cache (no LLM call). */
   cache_hit: boolean
+  /** Tier the answer was framed for and the resolver rule behind it; absent for turns rebuilt without them. */
+  audience?: Audience
+  audience_rule?: string
 }
 
 /** Facts about the project that the server extracts and remembers across turns. */

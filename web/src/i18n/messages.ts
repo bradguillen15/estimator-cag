@@ -1,4 +1,4 @@
-import type { DetailLevel, OutputFormat, ProjectType, ResponseLanguage } from '../api/types'
+import type { Audience, DetailLevel, OutputFormat, ProjectType, ResponseLanguage } from '../api/types'
 
 export type Locale = ResponseLanguage
 
@@ -60,6 +60,19 @@ const es = {
   'form.detailLevel': 'Nivel de detalle',
   'form.outputFormat': 'Formato de salida',
   'form.shortcut': 'para generar',
+  'form.audience': 'Audiencia',
+  'form.audience.auto': 'Automática',
+  'audience.executive': 'Ejecutivo',
+  'audience.pm': 'Product manager',
+  'audience.developer': 'Desarrollo',
+  'audience.default': 'General',
+  'result.audience': 'Para: {audience}',
+  'result.audience.rule': 'Regla: {rule}',
+  'sidebar.session.context': 'Memoria de la sesión',
+  'sidebar.session.context.anchors': 'Compromisos conservados',
+  'sidebar.session.context.summary': 'Resumen acumulado',
+  'sidebar.session.context.summaryChars': '{count} caracteres',
+  'sidebar.session.context.audience': 'Última audiencia',
   'form.submit': 'Generar estimación',
   'form.submit.followUp': 'Enviar',
   'form.submitting': 'Generando…',
@@ -147,6 +160,19 @@ const en: { [K in keyof typeof es]: string } = {
   'form.detailLevel': 'Detail level',
   'form.outputFormat': 'Output format',
   'form.shortcut': 'to generate',
+  'form.audience': 'Audience',
+  'form.audience.auto': 'Automatic',
+  'audience.executive': 'Executive',
+  'audience.pm': 'Product manager',
+  'audience.developer': 'Developer',
+  'audience.default': 'General',
+  'result.audience': 'For: {audience}',
+  'result.audience.rule': 'Rule: {rule}',
+  'sidebar.session.context': 'Session memory',
+  'sidebar.session.context.anchors': 'Commitments kept',
+  'sidebar.session.context.summary': 'Running summary',
+  'sidebar.session.context.summaryChars': '{count} characters',
+  'sidebar.session.context.audience': 'Last audience',
   'form.submit': 'Generate estimate',
   'form.submit.followUp': 'Send',
   'form.submitting': 'Generating…',
@@ -220,5 +246,15 @@ export function languageOptions(locale: Locale): { value: ResponseLanguage; labe
   return [
     { value: 'en', label: translate(locale, 'language.en') },
     { value: 'es', label: translate(locale, 'language.es') },
+  ]
+}
+
+const AUDIENCE_VALUES: Audience[] = ['executive', 'pm', 'developer']
+
+/** Selector options; 'auto' is the UI-only choice that omits the field so the API infers the tier. */
+export function audienceOptions(locale: Locale): { value: Audience | 'auto'; label: string }[] {
+  return [
+    { value: 'auto', label: translate(locale, 'form.audience.auto') },
+    ...AUDIENCE_VALUES.map((value) => ({ value, label: translate(locale, `audience.${value}`) })),
   ]
 }
