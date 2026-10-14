@@ -43,6 +43,13 @@ jobs:
           # Coverage is informational: a Coveralls outage must never fail a required check.
           fail-on-error: false
 
+      # The coverage job turns both reports into the PR comment (scripts/ci/coverage-summary.sh).
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: lcov-api
+          path: coverage/api.lcov
+          retention-days: 1
+
   web:
     name: web-tests
     runs-on: ubuntu-latest
@@ -72,14 +79,49 @@ jobs:
           # Coverage is informational: a Coveralls outage must never fail a required check.
           fail-on-error: false
 
-  # Closes the parallel Coveralls build once both suites uploaded. Not a required check.
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: lcov-web
+          path: web/coverage/lcov.info
+          retention-days: 1
+
+  # Closes the parallel Coveralls build once both suites uploaded, and posts the line coverage as a
+  # sticky PR comment and job summary (Coveralls' own PR comments never showed up). Not a required check.
   coverage:
     name: coverage
     needs: [api, web]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: lcov-*
+          path: lcov
+        # A failed suite uploads no report; the summary then marks it as missing.
+        continue-on-error: true
+
+      - name: Build coverage summary
+        run: |
+          bash scripts/ci/coverage-summary.sh \
+            api=lcov/lcov-api/api.lcov web=lcov/lcov-web/lcov.info > coverage-summary.md
+          echo "" >> coverage-summary.md
+          echo "Details: [Coveralls](https://coveralls.io/github/${{ github.repository }}) · commit ${{ github.event.pull_request.head.sha || github.sha }}" >> coverage-summary.md
+          cat coverage-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Edits the same comment on every push instead of adding a new one.
+      - uses: marocchino/sticky-pull-request-comment@v3.0.5
+        if: ${{ github.event_name == 'pull_request' }}
+        continue-on-error: true
+        with:
+          header: coverage
+          path: coverage-summary.md
+
       - uses: coverallsapp/github-action@v2.3.8
         with:
           parallel-finished: true

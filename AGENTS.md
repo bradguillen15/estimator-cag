@@ -415,7 +415,9 @@ CI (`.github/workflows/ci.yml`) runs both suites on every PR to `main`. `main` i
 only through a PR whose `api-tests` and `web-tests` checks pass (admins included). Those job names are
 required status checks — renaming them blocks every merge until branch protection is updated.
 CI also uploads both lcov reports to [Coveralls](https://coveralls.io/github/bradguillen15/estimator-cag)
-(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). It is informational, never a required check.
+(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). The same `coverage` job also posts the
+line coverage per suite as a sticky PR comment and job summary (`scripts/ci/coverage-summary.sh`), since Coveralls'
+own PR comments never appeared. It is informational, never a required check.
 CodeRabbit reviews PRs using `.coderabbit.yaml`, which points reviewers at the rules in this file.
 While the repo has fewer than 10 stars CodeRabbit does **not** auto-review: request it on each PR
 with `@coderabbitai review` (or `@coderabbitai full review`, or tick **Trigger review** in its status
