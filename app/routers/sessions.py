@@ -9,7 +9,9 @@ from app.dependencies import (
     get_session,
     get_session_store,
 )
+from app.schemas.estimations import Audience
 from app.schemas.sessions import (
+    SessionReviewedEstimateResponse,
     SessionCreatedResponse,
     SessionDetail,
     SessionEstimationResponse,
@@ -54,6 +56,10 @@ def get_session_detail(session: CurrentSession) -> SessionDetail:
         session_id=session.session_id,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        anchors_count=len(session.history.anchors),
+        summary_chars=len(session.history.summary),
+        last_audience=session.last_audience,
+        last_audience_rule=session.last_audience_rule,
         turns=[
             SessionTurnView(
                 description=t.description,
@@ -61,6 +67,7 @@ def get_session_detail(session: CurrentSession) -> SessionDetail:
                 estimate=t.estimate,
                 prompt_version=t.prompt_version,
                 cache_hit=t.cache_hit,
+                final_verdict=t.final_verdict,
                 created_at=t.created_at,
             )
             for t in session.turns
@@ -84,4 +91,27 @@ def create_session_estimate(
         prompt_version=prompt_version,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        audience=session.last_audience or Audience.DEFAULT,
+        audience_rule=session.last_audience_rule or "default",
+    )
+
+
+@router.post("/sessions/{session_id}/estimate/reviewed", response_model=SessionReviewedEstimateResponse)
+def create_session_reviewed_estimate(
+    turn: SafeSessionTurn,
+    session: CurrentSession,
+    service: Service,
+    prompt_version: PromptVersion,
+) -> SessionReviewedEstimateResponse:
+    """Critic review loop on the session prompt: up to 2 x REVIEW_MAX_ITERATIONS calls, then one recorded turn."""
+    result = service.generate_for_session_with_critic(turn, session, prompt_version)
+    return SessionReviewedEstimateResponse(
+        text=result.estimate,
+        prompt_version=prompt_version,
+        project_metadata=session.metadata,
+        history_turns=len(session.history),
+        audience=session.last_audience or Audience.DEFAULT,
+        audience_rule=session.last_audience_rule or "default",
+        final_verdict=result.final_verdict,
+        iterations=result.iterations,
     )

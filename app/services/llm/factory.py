@@ -21,29 +21,40 @@ def _key_by_prefix(settings: Settings) -> dict[str, tuple[str, str | None]]:
     }
 
 
-def get_llm_provider(settings: Settings) -> EstimationLLMProvider:
+def _build_provider(settings: Settings, models: list[str], setting_name: str) -> EstimationLLMProvider:
     key_by_prefix = _key_by_prefix(settings)
-    if not settings.llm_models:
-        raise ValueError("LLM_MODELS must list at least one '<provider>/<model>' entry.")
+    if not models:
+        raise ValueError(f"{setting_name} must list at least one '<provider>/<model>' entry.")
 
     api_keys: dict[str, str] = {}
-    for model in settings.llm_models:
+    for model in models:
         prefix = model.split("/", 1)[0]
         if "/" not in model or prefix not in key_by_prefix:
             raise ValueError(
-                f"Unsupported LLM_MODELS entry: {model!r}. "
+                f"Unsupported {setting_name} entry: {model!r}. "
                 f"Use '<provider>/<model>' with a provider in: {', '.join(sorted(key_by_prefix))}"
             )
         env_name, key = key_by_prefix[prefix]
         api_keys[prefix] = _require_key(env_name, key)
 
     return LiteLLMProvider(
-        models=settings.llm_models,
+        models=models,
         api_keys=api_keys,
         timeout=settings.llm_timeout,
         retries=settings.llm_retries,
         max_tokens=settings.llm_max_tokens,
     )
+
+
+def get_llm_provider(settings: Settings) -> EstimationLLMProvider:
+    return _build_provider(settings, settings.llm_models, "LLM_MODELS")
+
+
+def get_critic_provider(settings: Settings) -> EstimationLLMProvider | None:
+    """A provider for ``CRITIC_MODEL`` alone, or ``None`` when unset (the caller reuses the main chain)."""
+    if not settings.critic_model.strip():
+        return None
+    return _build_provider(settings, [settings.critic_model.strip()], "CRITIC_MODEL")
 
 
 def get_moderator(settings: Settings) -> ModerationProvider | None:

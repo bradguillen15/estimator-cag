@@ -59,6 +59,7 @@ describe('EstimateForm', () => {
         output_format: 'phases_table',
       },
       [],
+      false,
     )
   })
 
@@ -79,7 +80,21 @@ describe('EstimateForm', () => {
         output_format: 'narrative',
       },
       [],
+      false,
     )
+  })
+
+  it('omits the audience when left on automatic and sends the chosen tier otherwise', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    await user.type(description, DESCRIPTION)
+
+    expect(screen.getByLabelText('Audiencia')).toHaveValue('auto')
+    await user.click(submit)
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('audience')
+
+    await user.selectOptions(screen.getByLabelText('Audiencia'), 'Ejecutivo')
+    await user.click(submit)
+    expect(onSubmit.mock.calls[1][0]).toHaveProperty('audience', 'executive')
   })
 
   it('shows English labels when the locale is English', async () => {
@@ -93,6 +108,7 @@ describe('EstimateForm', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ project_type: 'data_pipeline' }),
       [],
+      false,
     )
     expect(submit).toHaveTextContent('Generate estimate')
   })
@@ -137,7 +153,7 @@ describe('EstimateForm', () => {
     expect(screen.queryByText('a.pdf')).not.toBeInTheDocument()
 
     await user.click(submit)
-    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [b])
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [b], false)
   })
 
   it('accepts only PDF and Word files in the picker', () => {
@@ -159,7 +175,7 @@ describe('EstimateForm', () => {
     expect(screen.getByText(/Máximo 5 archivos/)).toBeInTheDocument()
 
     await user.click(submit)
-    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), files.slice(0, 5))
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), files.slice(0, 5), false)
   })
 
   it('adds dropped PDF/Word files and rejects other types with a hint', async () => {
@@ -180,7 +196,7 @@ describe('EstimateForm', () => {
 
     await user.type(description, DESCRIPTION)
     await user.click(submit)
-    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [a])
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(Object), [a], false)
   })
 
   it('reads as a follow-up composer once the session has turns', () => {
@@ -203,5 +219,25 @@ describe('EstimateForm', () => {
     expect(screen.getByLabelText(/transcripción o descripción del proyecto/i)).toHaveValue('')
     expect(screen.queryByText('brief.pdf')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Nivel de detalle')).toHaveValue('detailed')
+  })
+
+  it('keeps the critic review off by default and passes it on when toggled', async () => {
+    const { user, description, submit, onSubmit } = setup()
+    const toggle = screen.getByRole('checkbox', { name: 'Revisión con crítico' })
+    expect(toggle).not.toBeChecked()
+    expect(screen.getByText(/tarda más y usa más llamadas/i)).toBeInTheDocument()
+
+    await user.type(description, DESCRIPTION)
+    await user.click(submit)
+    expect(onSubmit.mock.calls[0][2]).toBe(false)
+
+    await user.click(toggle)
+    await user.click(submit)
+    expect(onSubmit.mock.calls[1][2]).toBe(true)
+  })
+
+  it('labels the critic review toggle in English', () => {
+    setup(false, 'en')
+    expect(screen.getByRole('checkbox', { name: 'Critic review' })).toBeInTheDocument()
   })
 })

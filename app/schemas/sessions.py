@@ -1,8 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.estimations import EstimationResponse
+from app.schemas.review import ReviewIteration
+from app.schemas.critic import CriticVerdict
+from app.schemas.estimations import Audience, EstimationResponse
 
 
 class SessionCreatedResponse(BaseModel):
@@ -24,11 +26,40 @@ class ProjectMetadata(BaseModel):
         return self == ProjectMetadata()
 
 
+class TurnPair(BaseModel):
+    """One user message and the assistant reply it got, as the history replays them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user: str
+    assistant: str
+
+
+class HistoryMemory(BaseModel):
+    """What survives after turns leave the history window: a running summary and verbatim anchors.
+
+    Lives in ``schemas`` because the session store, the compressor and the prompt loader share it.
+    """
+
+    summary: str = ""
+    anchors: list[TurnPair] = Field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not self.summary and not self.anchors
+
+
 class SessionEstimationResponse(EstimationResponse):
     """A session turn: the estimate plus the session memory after this turn."""
 
     project_metadata: ProjectMetadata
     history_turns: int = Field(description="Turns kept in the history window after this one.")
+
+
+class SessionReviewedEstimateResponse(SessionEstimationResponse):
+    """A session turn produced by the critic review loop: the turn fields plus the Critic's verdict and trail."""
+
+    final_verdict: CriticVerdict
+    iterations: list[ReviewIteration]
 
 
 class SessionSummary(BaseModel):
@@ -49,6 +80,7 @@ class SessionTurnView(BaseModel):
     estimate: str
     prompt_version: str
     cache_hit: bool = False
+    final_verdict: CriticVerdict | None = Field(default=None, description="Set on critic-reviewed turns only.")
     created_at: datetime
 
 
@@ -59,5 +91,9 @@ class SessionDetail(BaseModel):
     project_metadata: ProjectMetadata
     history_turns: int = Field(description="Turns kept in the history window.")
     turns: list[SessionTurnView] = Field(default_factory=list, description="Oldest first.")
+    anchors_count: int = Field(default=0, description="Turns kept verbatim after leaving the window (commitments).")
+    summary_chars: int = Field(default=0, description="Length of the running summary of the folded turns.")
+    last_audience: Audience | None = Field(default=None, description="Tier of the latest turn (none before the first).")
+    last_audience_rule: str | None = Field(default=None, description="Resolver rule that chose it.")
     created_at: datetime
     updated_at: datetime

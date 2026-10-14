@@ -22,31 +22,64 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
+from app.schemas.critic import CriticVerdict
 from app.exceptions import SessionNotFoundError
-from app.schemas.sessions import ProjectMetadata
+from app.schemas.estimations import Audience
+from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
 
 Role = Literal["user", "assistant"]
 DEFAULT_MAX_TURNS = 6  # SESSION_MAX_TURNS overrides it
+DEFAULT_MAX_ANCHORS = 5  # SESSION_MAX_ANCHORS overrides it
 
 
 class ConversationHistory:
     """The last ``max_turns`` turns (one turn = a user message and the assistant reply).
 
-    Older messages are dropped as a whole turn, so the window never starts with an orphan reply.
+    Older messages leave as a whole turn, so the window never starts with an orphan reply. The
+    window itself is pure data: ``add_turn`` returns the turns that left it and the compressor
+    decides what to keep (``anchors``, verbatim) or fold (``summary``).
     """
 
-    def __init__(self, max_turns: int = DEFAULT_MAX_TURNS) -> None:
+    def __init__(self, max_turns: int = DEFAULT_MAX_TURNS, max_anchors: int = DEFAULT_MAX_ANCHORS) -> None:
         if max_turns < 1:
             raise ValueError("max_turns must be at least 1")
+        if max_anchors < 0:
+            raise ValueError("max_anchors must not be negative")
         self.max_turns = max_turns
+        self.max_anchors = max_anchors
+        self.summary = ""
+        self._anchors: list[TurnPair] = []
         self._messages: list[dict[str, str]] = []
 
-    def add_turn(self, user_content: str, assistant_content: str) -> None:
+    def add_turn(self, user_content: str, assistant_content: str) -> list[TurnPair]:
+        """Adds a turn; returns the oldest turns that no longer fit the window (oldest first)."""
         self._messages.append({"role": "user", "content": user_content})
         self._messages.append({"role": "assistant", "content": assistant_content})
         overflow = len(self._messages) - 2 * self.max_turns
-        if overflow > 0:
-            del self._messages[:overflow]
+        if overflow <= 0:
+            return []
+        evicted = [
+            TurnPair(user=self._messages[i]["content"], assistant=self._messages[i + 1]["content"])
+            for i in range(0, overflow, 2)
+        ]
+        del self._messages[:overflow]
+        return evicted
+
+    def add_anchor(self, pair: TurnPair) -> None:
+        """Keeps a turn verbatim; beyond ``max_anchors`` the oldest anchor is dropped."""
+        if self.max_anchors == 0:
+            return
+        self._anchors.append(pair)
+        del self._anchors[: -self.max_anchors]
+
+    @property
+    def anchors(self) -> list[TurnPair]:
+        return list(self._anchors)
+
+    @property
+    def memory(self) -> HistoryMemory:
+        """What the system prompt renders for the turns that left the window."""
+        return HistoryMemory(summary=self.summary, anchors=self.anchors)
 
     def to_messages_list(self, system_prompt: str) -> list[dict[str, str]]:
         """The ``messages`` array for the LLM: the system prompt, then the kept turns.
@@ -80,6 +113,7 @@ class TurnRecord:
     estimate: str
     prompt_version: str
     cache_hit: bool = False  # session turns skip the response caches
+    final_verdict: CriticVerdict | None = None  # set only by critic-reviewed turns
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -91,17 +125,22 @@ class Session:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     turns: list[TurnRecord] = field(default_factory=list)
+    last_audience: Audience | None = None  # tier + rule of the latest turn
+    last_audience_rule: str | None = None
 
-    def record_turn(self, user_content: str, assistant_content: str, display: TurnRecord | None = None) -> None:
-        """Add a turn to the history window and bump ``updated_at``.
+    def record_turn(
+        self, user_content: str, assistant_content: str, display: TurnRecord | None = None
+    ) -> list[TurnPair]:
+        """Add a turn to the history window and bump ``updated_at``; returns the turns that left it.
 
         ``display`` is kept in step with the history: same window, oldest dropped first.
         """
-        self.history.add_turn(user_content, assistant_content)
+        evicted = self.history.add_turn(user_content, assistant_content)
         if display is not None:
             self.turns.append(display)
             del self.turns[: -self.history.max_turns]
         self.updated_at = datetime.now(UTC)
+        return evicted
 
 
 class SessionStore:
@@ -110,15 +149,16 @@ class SessionStore:
     Sync handlers run in FastAPI's threadpool, so access to the dict is guarded by a lock.
     """
 
-    def __init__(self, max_turns: int = DEFAULT_MAX_TURNS) -> None:
+    def __init__(self, max_turns: int = DEFAULT_MAX_TURNS, max_anchors: int = DEFAULT_MAX_ANCHORS) -> None:
         self._max_turns = max_turns
+        self._max_anchors = max_anchors
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
 
     def create(self) -> Session:
         session = Session(
             session_id=str(uuid.uuid4()),
-            history=ConversationHistory(self._max_turns),
+            history=ConversationHistory(self._max_turns, self._max_anchors),
         )
         with self._lock:
             self._sessions[session.session_id] = session

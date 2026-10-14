@@ -21,6 +21,16 @@ The interactive diagram of this flow, with file/line sources per node, is
 [viewable here](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/main/docs/architecture/estimation-flow/estimation-flow.html)
 (source: `docs/architecture/estimation-flow/`; see §5.5 to regenerate it).
 
+`POST /api/v1/estimate/reviewed` runs the same entry (guardrails) then `EstimationService.generate_with_critic`:
+`ReviewLoop` loops actor → `Critic` (JSON verdict) → actor again with a trailing `critic_feedback` prompt block
+(max `REVIEW_MAX_ITERATIONS` attempts; caches bypassed; the output check runs on the final answer only).
+`POST /api/v1/sessions/{id}/estimate/reviewed` reuses the same `ReviewLoop` with a session actor
+(`generate_for_session_with_critic`): the loop runs on the session prompt and only the final estimate is
+recorded, through the same `_record_session_turn` as a normal turn (verdict kept on the `TurnRecord`).
+
+Every path first resolves the audience tier (`services/audience.py`) and carries it on the request: a
+non-default tier adds the trailing `audience.j2` block and enters the exact cache key and the semantic bucket.
+
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
@@ -79,7 +89,12 @@ app/
 ├── schemas/             # Pydantic request/response models
 └── services/            # Business logic. Knows nothing about HTTP.
     ├── estimation_service.py   # Use case: render prompts, delegate to the provider
-    ├── sessions.py             # Session state: sliding-window history + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── sessions.py             # Session state: sliding-window history (returns evicted turns; holds anchors + summary) + display `TurnRecord`s (same window) + ProjectMetadata + updated_at, in-process store (list/get)
+    ├── audience.py             # Audience tier: pure regex resolver (explicit > compliance > executive > dev keywords > small team > pm) -> (tier, rule); no LLM
+    ├── history_compression.py  # Evicted turns: anchor regex (EN/ES) keeps commitments verbatim, the rest is folded by the summarizer
+    ├── critic.py               # Critic review loop: LLM audit (prompts/critic/<version>/) -> `CriticFeedback`; any failure = accept (logged)
+    ├── review_loop.py         # Critic review loop: pure loop (no SDK/HTTP); accept / iterate with feedback / reject / budget exhausted
+    ├── summarizer.py           # Third LLM call (prompts/summary/<version>/): bounded running summary; failure keeps the previous one
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)
@@ -87,6 +102,8 @@ app/
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
 
 tests/                   # pytest: prompts, schemas, provider (patched litellm.completion), service, routes
+
+evals/                   # Dev tool: golden_dataset.json, dataset.py, metrics.py, run.py (`pnpm evals`). May import app.*; app/ never imports evals
 
 web/src/                 # React UI — talks to the API over HTTP only, never imports Python
 ├── api/                 # client.ts (fetch + SSE parser) and types.ts (mirror of app/schemas)
@@ -385,6 +402,7 @@ pnpm test                # both suites from the repo root (API first, then UI)
 pnpm test:api            # uv run pytest  (tests/)
 pnpm test:web            # vitest run     (web/src/**/*.test.ts[x])
 pnpm test:watch          # vitest in watch mode (UI)
+pnpm evals               # uv run python -m evals.run: REAL, billed LLM calls on the golden dataset; never part of pytest/CI
 pnpm test:coverage       # pytest --cov=app + vitest --coverage (HTML report: web/coverage/index.html)
 ```
 
@@ -397,7 +415,9 @@ CI (`.github/workflows/ci.yml`) runs both suites on every PR to `main`. `main` i
 only through a PR whose `api-tests` and `web-tests` checks pass (admins included). Those job names are
 required status checks — renaming them blocks every merge until branch protection is updated.
 CI also uploads both lcov reports to [Coveralls](https://coveralls.io/github/bradguillen15/estimator-cag)
-(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). It is informational, never a required check.
+(`CI_COVERAGE=1` in `scripts/ci/*.sh`; the `coverage` job merges them). The same `coverage` job also posts the
+line coverage per suite as a sticky PR comment and job summary (`scripts/ci/coverage-summary.sh`), since Coveralls'
+own PR comments never appeared. It is informational, never a required check.
 CodeRabbit reviews PRs using `.coderabbit.yaml`, which points reviewers at the rules in this file.
 While the repo has fewer than 10 stars CodeRabbit does **not** auto-review: request it on each PR
 with `@coderabbitai review` (or `@coderabbitai full review`, or tick **Trigger review** in its status

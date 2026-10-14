@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { jsonResponse, pdf, REQUEST, sessionEstimate } from '../test/fixtures'
-import { ApiError, checkHealth, createSession, createSessionEstimate, getPromptContext } from './client'
+import { ApiError, checkHealth, createSession, createSessionEstimate, createSessionReviewedEstimate, getPromptContext } from './client'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -47,6 +47,16 @@ describe('createSessionEstimate', () => {
     expect(form.get('output_format')).toBe('line_items')
     expect(form.get('language')).toBe('es')
     expect((form.getAll('attachments') as File[]).map((file) => file.name)).toEqual(['a.pdf', 'b.pdf'])
+  })
+
+  it('sends the audience only when one was chosen', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(sessionEstimate()))
+
+    await createSessionEstimate('abc', REQUEST, [])
+    await createSessionEstimate('abc', { ...REQUEST, audience: 'executive' }, [])
+
+    expect((fetchMock.mock.calls[0][1]?.body as FormData).has('audience')).toBe(false)
+    expect((fetchMock.mock.calls[1][1]?.body as FormData).get('audience')).toBe('executive')
   })
 
   it('sends no attachments field when there are no files', async () => {
@@ -106,5 +116,29 @@ describe('checkHealth and getPromptContext', () => {
     fetchMock.mockResolvedValue(jsonResponse({ prompt_version: 'v1', examples_markdown: '### Ejemplo 1' }))
     await expect(getPromptContext()).resolves.toEqual({ prompt_version: 'v1', examples_markdown: '### Ejemplo 1' })
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/context')
+  })
+})
+
+describe('createSessionReviewedEstimate', () => {
+  it('posts the same multipart form to /estimate/reviewed and returns the verdict and trail', async () => {
+    const body = { ...sessionEstimate(), final_verdict: 'accept', iterations: [{ attempt: 1, verdict: 'accept', issues: [] }] }
+    fetchMock.mockResolvedValue(jsonResponse(body))
+
+    await expect(
+      createSessionReviewedEstimate('abc', { ...REQUEST, audience: 'pm' }, [pdf('a.pdf')]),
+    ).resolves.toEqual(body)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/sessions/abc/estimate/reviewed')
+    expect(init?.method).toBe('POST')
+    const form = init?.body as FormData
+    expect(form.get('transcript')).toBe(REQUEST.description)
+    expect(form.get('audience')).toBe('pm')
+    expect((form.getAll('attachments') as File[]).map((file) => file.name)).toEqual(['a.pdf'])
+  })
+
+  it('maps HTTP errors like the normal estimate', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: 'Session not found' }, 404))
+    await expect(createSessionReviewedEstimate('abc', REQUEST, [])).rejects.toMatchObject({ status: 404 })
   })
 })

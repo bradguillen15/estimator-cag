@@ -5,6 +5,7 @@ import type {
   SessionCreatedResponse,
   SessionDetail,
   SessionEstimationResponse,
+  SessionReviewedEstimateResponse,
   SessionSummary,
 } from './types'
 
@@ -85,24 +86,45 @@ export async function getSession(sessionId: string, signal?: AbortSignal): Promi
 }
 
 /** Multipart request: no explicit Content-Type, the browser adds the boundary. */
-export async function createSessionEstimate(
+async function postSessionTurn<T>(
+  action: string,
   sessionId: string,
   request: EstimationRequest,
   files: File[],
   signal?: AbortSignal,
-): Promise<SessionEstimationResponse> {
+): Promise<T> {
   const form = new FormData()
   form.append('transcript', request.description)
   form.append('project_type', request.project_type)
   form.append('detail_level', request.detail_level)
   form.append('output_format', request.output_format)
   form.append('language', request.language)
+  if (request.audience) form.append('audience', request.audience)
   for (const file of files) form.append('attachments', file)
 
-  const response = await send(`/api/v1/sessions/${encodeURIComponent(sessionId)}/estimate`, {
+  const response = await send(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, {
     method: 'POST',
     body: form,
     signal,
   })
   return response.json()
+}
+
+export function createSessionEstimate(
+  sessionId: string,
+  request: EstimationRequest,
+  files: File[],
+  signal?: AbortSignal,
+): Promise<SessionEstimationResponse> {
+  return postSessionTurn('estimate', sessionId, request, files, signal)
+}
+
+/** Same form as `createSessionEstimate`; the answer goes through the critic loop (slower, several LLM calls). */
+export function createSessionReviewedEstimate(
+  sessionId: string,
+  request: EstimationRequest,
+  files: File[],
+  signal?: AbortSignal,
+): Promise<SessionReviewedEstimateResponse> {
+  return postSessionTurn('estimate/reviewed', sessionId, request, files, signal)
 }

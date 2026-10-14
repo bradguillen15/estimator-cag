@@ -8,6 +8,7 @@ from starlette.concurrency import iterate_in_threadpool
 
 from app.dependencies import get_estimation_service, get_prompt_version, get_safe_request
 from app.exceptions import EstimationError
+from app.schemas.review import ReviewedEstimateResponse
 from app.schemas.estimations import (
     EstimationRequest,
     EstimationResponse,
@@ -42,7 +43,29 @@ def get_prompt_context(service: Service, prompt_version: PromptVersion) -> Promp
 def create_estimate(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> EstimationResponse:
     metrics = GenerationMetrics(model=service.model)
     text = service.generate(body, prompt_version, metrics=metrics)
-    return EstimationResponse(text=text, prompt_version=prompt_version, cache_hit=metrics.cache_hit)
+    audience = service.resolve_audience(body)
+    return EstimationResponse(
+        text=text,
+        prompt_version=prompt_version,
+        cache_hit=metrics.cache_hit,
+        audience=audience.audience,
+        audience_rule=audience.rule,
+    )
+
+
+@router.post("/estimate/reviewed", response_model=ReviewedEstimateResponse)
+def create_reviewed_estimate(body: SafeRequest, service: Service, prompt_version: PromptVersion) -> ReviewedEstimateResponse:
+    """Critic review loop: up to 2 x REVIEW_MAX_ITERATIONS LLM calls, caches bypassed."""
+    result = service.generate_with_critic(body, prompt_version)
+    audience = service.resolve_audience(body)
+    return ReviewedEstimateResponse(
+        estimation=result.estimate,
+        prompt_version=prompt_version,
+        audience=audience.audience,
+        audience_rule=audience.rule,
+        final_verdict=result.final_verdict,
+        iterations=result.iterations,
+    )
 
 
 @router.post("/estimate/stream", response_class=EventSourceResponse)
@@ -53,6 +76,7 @@ async def create_estimate_stream(
     prompt_version: PromptVersion,
 ) -> AsyncIterator[ServerSentEvent]:
     metrics = GenerationMetrics(model=service.model)
+    audience = service.resolve_audience(body)
 
     # The HTTP status is already 200 once streaming starts, so failures travel as an `error` event.
     stream = None
@@ -72,6 +96,8 @@ async def create_estimate_stream(
                     "latency_seconds": metrics.latency_seconds,
                     "cache_hit": metrics.cache_hit,
                     "prompt_version": prompt_version,
+                    "audience": audience.audience.value,
+                    "audience_rule": audience.rule,
                 },
                 event="done",
             )

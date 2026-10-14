@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     embedding_dims: int = 1536
     # Conversation sessions (process memory): turns of history replayed to the LLM per session.
     session_max_turns: int = Field(default=6, ge=1)
+    # History compression: turns leaving the window are kept verbatim when they carry a commitment
+    # (at most this many; the oldest is dropped beyond it) or folded into a bounded running summary.
+    session_max_anchors: int = Field(default=5, ge=0)
+    session_summary_max_chars: int = Field(default=2000, ge=200)
+    # Critic review loop (POST /estimate/reviewed). CRITIC_MODEL is one "<provider>/<model>" entry for the
+    # Critic (a cheaper model is fine); empty reuses the LLM_MODELS chain. REVIEW_MAX_ITERATIONS is the
+    # maximum number of actor attempts (each costs one actor call plus one critic call).
+    critic_model: str = ""
+    review_max_iterations: int = Field(default=3, ge=1)
     app_env: str
     log_level: str
 

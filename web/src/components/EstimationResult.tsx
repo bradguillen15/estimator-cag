@@ -4,13 +4,14 @@ import type { GenerationMeta } from '../api/types'
 import { useT } from '../i18n/useLocale'
 import { Check, Copy } from './icons'
 import { Markdown } from './Markdown'
+import { ReviewTrail, VerdictBadge } from './ReviewTrail'
 import { Tooltip } from './Tooltip'
 
 const COPIED_FEEDBACK_MS = 1600
 
 /** What one estimate card shows: the answer, or the placeholder while it is generated. */
 export type EstimationCardState =
-  | { status: 'loading' }
+  | { status: 'loading'; /** Waiting on the critic loop: a longer, multi-call wait. */ reviewing?: boolean }
   | { status: 'done'; text: string; meta: GenerationMeta | null }
 
 export function ErrorAlert({ message }: { message: string }) {
@@ -42,8 +43,20 @@ export function EstimationResult({ state }: { state: EstimationCardState }) {
         </div>
       </div>
       <article className="rounded-[22px] bg-surface p-5 shadow-card md:p-7">
-        {done ? <Markdown>{state.text}</Markdown> : <Skeleton label={t('result.generating')} />}
+        {done ? (
+          <Markdown>{state.text}</Markdown>
+        ) : (
+          <Skeleton label={t('result.generating')} />
+        )}
+        {!done && state.reviewing && (
+          <p role="status" className="mt-4 text-[13px] text-muted">
+            {t('result.reviewing')}
+          </p>
+        )}
       </article>
+      {done && state.meta?.iterations && state.meta.iterations.length > 0 && (
+        <ReviewTrail iterations={state.meta.iterations} />
+      )}
     </section>
   )
 }
@@ -85,6 +98,15 @@ function MetaChips({ meta }: { meta: GenerationMeta }) {
   const t = useT()
   return (
     <div className="flex flex-wrap gap-1.5">
+      {meta.audience && (
+        <span
+          title={meta.audience_rule ? t('result.audience.rule', { rule: meta.audience_rule }) : undefined}
+          className="rounded-full bg-field px-[9px] py-[3px] text-[11.5px] text-muted shadow-[0_0_0_1px_var(--line)]"
+        >
+          {t('result.audience', { audience: t(`audience.${meta.audience}`) })}
+        </span>
+      )}
+      {meta.final_verdict && <VerdictBadge verdict={meta.final_verdict} />}
       {meta.cache_hit && (
         <span className="rounded-full bg-accent-soft px-[9px] py-[3px] font-mono text-[11.5px] font-medium text-accent shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_30%,transparent)]">
           {t('result.cached')}

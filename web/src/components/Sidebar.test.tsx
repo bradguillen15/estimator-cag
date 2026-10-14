@@ -83,6 +83,37 @@ describe('Sidebar', () => {
     expect(screen.queryByText(/89abcdef/)).not.toBeInTheDocument()
   })
 
+  it('shows the session memory: anchors, summary size and last audience', () => {
+    renderSidebar({
+      session: {
+        id: 'abcdefgh',
+        metadata: METADATA,
+        turns: 2,
+        memory: { anchors: 2, summaryChars: 340, audience: 'developer', audienceRule: 'dev_keywords' },
+      },
+    })
+
+    const panel = screen.getByRole('heading', { name: 'Memoria de la sesión' }).closest('section') as HTMLElement
+    expect(panel).toHaveTextContent('Compromisos conservados2')
+    expect(panel).toHaveTextContent('340 caracteres')
+    expect(screen.getByText('Desarrollo')).toHaveAttribute('title', 'Regla: dev_keywords')
+  })
+
+  it('hides the session memory panel when there is nothing to show', () => {
+    renderSidebar({
+      session: { id: 'abcdefgh', metadata: METADATA, turns: 1, memory: { anchors: 0, summaryChars: 0, audience: null, audienceRule: null } },
+    })
+    expect(screen.queryByRole('heading', { name: 'Memoria de la sesión' })).not.toBeInTheDocument()
+  })
+
+  it('omits the summary size when it is zero', () => {
+    renderSidebar({
+      session: { id: 'abcdefgh', metadata: METADATA, turns: 1, memory: { anchors: 1, summaryChars: 0, audience: 'pm', audienceRule: 'x' } },
+    })
+    expect(screen.getByRole('heading', { name: 'Memoria de la sesión' })).toBeInTheDocument()
+    expect(screen.queryByText(/caracteres/)).not.toBeInTheDocument()
+  })
+
   it('uses the singular turn label and English copy', () => {
     renderSidebar({ session: { id: '0123456789abcdef', metadata: METADATA, turns: 1 } }, 'en')
     expect(screen.getByText('1 turn')).toBeInTheDocument()

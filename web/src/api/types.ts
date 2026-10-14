@@ -5,6 +5,8 @@ export type DetailLevel = 'summary' | 'medium' | 'detailed'
 export type OutputFormat = 'phases_table' | 'line_items' | 'narrative'
 /** Language the model answers in. The API falls back to 'es' for anything else. */
 export type ResponseLanguage = 'es' | 'en'
+/** Who reads the estimate. Optional on requests: omitted, the API infers it. */
+export type Audience = 'executive' | 'pm' | 'developer' | 'default'
 
 /** What the form collects; language (UI + model response) comes from the sidebar. */
 export interface EstimationInput {
@@ -12,6 +14,8 @@ export interface EstimationInput {
   project_type: ProjectType
   detail_level: DetailLevel
   output_format: OutputFormat
+  /** Omitted = automatic: the API infers the tier. */
+  audience?: Audience
 }
 
 export interface EstimationRequest extends EstimationInput {
@@ -23,6 +27,41 @@ export interface EstimationResponse {
   prompt_version: string
   /** True when the answer was served from the response cache (no LLM call). */
   cache_hit: boolean
+  /** Tier the prompt was framed for, and the resolver rule that chose it. */
+  audience: Audience
+  audience_rule: string
+}
+
+export type CriticVerdict = 'accept' | 'needs_iteration' | 'reject'
+
+export interface CriticIssue {
+  category:
+    | 'math_error'
+    | 'hallucination'
+    | 'scope_mismatch'
+    | 'phase_imbalance'
+    | 'missing_assumption'
+    | 'unrealistic_estimate'
+  severity: 'critical' | 'major' | 'minor'
+  message: string
+}
+
+export interface ReviewIteration {
+  /** 1-based actor attempt. */
+  attempt: number
+  verdict: CriticVerdict
+  issues: CriticIssue[]
+}
+
+/** POST /estimate/reviewed (critic review loop). Mirrored for completeness; the UI only uses the session variant. */
+export interface ReviewedEstimateResponse {
+  estimation: string
+  prompt_version: string
+  audience: Audience
+  audience_rule: string
+  /** needs_iteration here means the iteration budget ran out with issues still open. */
+  final_verdict: CriticVerdict
+  iterations: ReviewIteration[]
 }
 
 export interface PromptContext {
@@ -35,6 +74,12 @@ export interface GenerationMeta {
   prompt_version: string
   /** True when the answer was served from the response cache (no LLM call). */
   cache_hit: boolean
+  /** Tier the answer was framed for and the resolver rule behind it; absent for turns rebuilt without them. */
+  audience?: Audience
+  audience_rule?: string
+  /** Critic review turns only: the final verdict, and the attempts (absent on turns rebuilt from the server). */
+  final_verdict?: CriticVerdict
+  iterations?: ReviewIteration[]
 }
 
 /** Facts about the project that the server extracts and remembers across turns. */
@@ -73,6 +118,8 @@ export interface SessionTurnView {
   estimate: string
   prompt_version: string
   cache_hit: boolean
+  /** Set on critic review loop turns only. */
+  final_verdict?: CriticVerdict | null
   created_at: string
 }
 
@@ -83,6 +130,13 @@ export interface SessionDetail {
   history_turns: number
   /** Oldest first; capped by the server's history window. */
   turns: SessionTurnView[]
+  /** Turns kept verbatim after leaving the window (commitments such as an NDA or a frozen scope). */
+  anchors_count: number
+  /** Length of the running summary of the turns folded out of the window. */
+  summary_chars: number
+  /** Tier and resolver rule of the latest turn; null before the first one. */
+  last_audience: Audience | null
+  last_audience_rule: string | null
   created_at: string
   updated_at: string
 }
@@ -91,6 +145,12 @@ export interface SessionEstimationResponse extends EstimationResponse {
   project_metadata: ProjectMetadata
   /** Turns currently held in the server's sliding history window. */
   history_turns: number
+}
+
+/** POST /sessions/{id}/estimate/reviewed: the session turn plus the Critic's verdict and trail. */
+export interface SessionReviewedEstimateResponse extends SessionEstimationResponse {
+  final_verdict: CriticVerdict
+  iterations: ReviewIteration[]
 }
 
 export const DESCRIPTION_MIN = 20

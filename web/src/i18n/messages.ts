@@ -1,4 +1,4 @@
-import type { DetailLevel, OutputFormat, ProjectType, ResponseLanguage } from '../api/types'
+import type { Audience, DetailLevel, OutputFormat, ProjectType, ResponseLanguage } from '../api/types'
 
 export type Locale = ResponseLanguage
 
@@ -60,6 +60,37 @@ const es = {
   'form.detailLevel': 'Nivel de detalle',
   'form.outputFormat': 'Formato de salida',
   'form.shortcut': 'para generar',
+  'form.audience': 'Audiencia',
+  'form.audience.auto': 'Automática',
+  'audience.executive': 'Ejecutivo',
+  'audience.pm': 'Product manager',
+  'audience.developer': 'Desarrollo',
+  'audience.default': 'General',
+  'result.audience': 'Para: {audience}',
+  'result.audience.rule': 'Regla: {rule}',
+  'sidebar.session.context': 'Memoria de la sesión',
+  'sidebar.session.context.anchors': 'Compromisos conservados',
+  'sidebar.session.context.summary': 'Resumen acumulado',
+  'sidebar.session.context.summaryChars': '{count} caracteres',
+  'sidebar.session.context.audience': 'Última audiencia',
+  'form.review': 'Revisión con crítico',
+  'form.review.hint': 'Un crítico revisa y corrige la estimación. Tarda más y usa más llamadas al LLM.',
+  'result.reviewing': 'Revisando con el crítico…',
+  'verdict.accept': 'Aceptada',
+  'verdict.needs_iteration': 'Requiere iteración (presupuesto agotado)',
+  'verdict.reject': 'Rechazada',
+  'review.trail': 'Revisiones',
+  'review.attempt': 'Intento {attempt}',
+  'review.noIssues': 'Sin observaciones.',
+  'severity.critical': 'Crítica',
+  'severity.major': 'Mayor',
+  'severity.minor': 'Menor',
+  'issue.math_error': 'Error de cálculo',
+  'issue.hallucination': 'Dato inventado',
+  'issue.scope_mismatch': 'Alcance no coincide',
+  'issue.phase_imbalance': 'Fases desbalanceadas',
+  'issue.missing_assumption': 'Falta un supuesto',
+  'issue.unrealistic_estimate': 'Estimación poco realista',
   'form.submit': 'Generar estimación',
   'form.submit.followUp': 'Enviar',
   'form.submitting': 'Generando…',
@@ -147,6 +178,37 @@ const en: { [K in keyof typeof es]: string } = {
   'form.detailLevel': 'Detail level',
   'form.outputFormat': 'Output format',
   'form.shortcut': 'to generate',
+  'form.audience': 'Audience',
+  'form.audience.auto': 'Automatic',
+  'audience.executive': 'Executive',
+  'audience.pm': 'Product manager',
+  'audience.developer': 'Developer',
+  'audience.default': 'General',
+  'result.audience': 'For: {audience}',
+  'result.audience.rule': 'Rule: {rule}',
+  'sidebar.session.context': 'Session memory',
+  'sidebar.session.context.anchors': 'Commitments kept',
+  'sidebar.session.context.summary': 'Running summary',
+  'sidebar.session.context.summaryChars': '{count} characters',
+  'sidebar.session.context.audience': 'Last audience',
+  'form.review': 'Critic review',
+  'form.review.hint': 'A critic reviews and corrects the estimate. Takes longer and uses more LLM calls.',
+  'result.reviewing': 'Reviewing with the critic…',
+  'verdict.accept': 'Accepted',
+  'verdict.needs_iteration': 'Needs iteration (budget exhausted)',
+  'verdict.reject': 'Rejected',
+  'review.trail': 'Reviews',
+  'review.attempt': 'Attempt {attempt}',
+  'review.noIssues': 'No issues.',
+  'severity.critical': 'Critical',
+  'severity.major': 'Major',
+  'severity.minor': 'Minor',
+  'issue.math_error': 'Math error',
+  'issue.hallucination': 'Hallucination',
+  'issue.scope_mismatch': 'Scope mismatch',
+  'issue.phase_imbalance': 'Phase imbalance',
+  'issue.missing_assumption': 'Missing assumption',
+  'issue.unrealistic_estimate': 'Unrealistic estimate',
   'form.submit': 'Generate estimate',
   'form.submit.followUp': 'Send',
   'form.submitting': 'Generating…',
@@ -220,5 +282,15 @@ export function languageOptions(locale: Locale): { value: ResponseLanguage; labe
   return [
     { value: 'en', label: translate(locale, 'language.en') },
     { value: 'es', label: translate(locale, 'language.es') },
+  ]
+}
+
+const AUDIENCE_VALUES: Audience[] = ['executive', 'pm', 'developer']
+
+/** Selector options; 'auto' is the UI-only choice that omits the field so the API infers the tier. */
+export function audienceOptions(locale: Locale): { value: Audience | 'auto'; label: string }[] {
+  return [
+    { value: 'auto', label: translate(locale, 'form.audience.auto') },
+    ...AUDIENCE_VALUES.map((value) => ({ value, label: translate(locale, `audience.${value}`) })),
   ]
 }

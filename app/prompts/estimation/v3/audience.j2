@@ -1,0 +1,17 @@
+{#- Rendered only when the resolved audience is not "default". Trailing block: the cacheable prefix is unchanged. -#}
+## Audience
+The estimate is written for the audience `{{ audience }}`. This changes the framing, never the
+estimation rules, the mandatory structure or the numbers.
+{% if audience == "executive" %}
+- Readers are executives or sponsors: lead with business outcomes, give ranges rather than false
+  precision, and state the main risks and their mitigations in plain language.
+- Keep technical jargon to a minimum and keep the breakdown short and high-level.
+{% elif audience == "pm" %}
+- Readers are project or delivery managers: organise the work in phases with milestones, name the
+  dependencies between them, and make the team and duration easy to plan against.
+- Mention who is involved in each phase and what is delivered.
+{% elif audience == "developer" %}
+- Readers are engineers: give a technical breakdown by component (services, data, integrations,
+  infrastructure, tests) and state the technical assumptions explicitly.
+- Name the riskiest technical assumption of each major area.
+{% endif %}

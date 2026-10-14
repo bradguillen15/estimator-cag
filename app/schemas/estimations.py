@@ -31,12 +31,25 @@ class ResponseLanguage(str, Enum):
     EN = "en"
 
 
+class Audience(str, Enum):
+    """Who will read the estimate; shapes the framing of the answer (see ``services/audience.py``)."""
+
+    EXECUTIVE = "executive"
+    PM = "pm"
+    DEVELOPER = "developer"
+    DEFAULT = "default"
+
+
 class EstimationRequest(BaseModel):
     description: str = Field(min_length=20, max_length=20000)
     project_type: ProjectType
     detail_level: DetailLevel
     output_format: OutputFormat
     language: ResponseLanguage = ResponseLanguage.ES
+    audience: Audience | None = Field(
+        default=None,
+        description="Explicit audience; wins over the one inferred from the text. Omit to infer it.",
+    )
 
     @field_validator("language", mode="before")
     @classmethod
@@ -52,6 +65,8 @@ class EstimationResponse(BaseModel):
     text: str
     prompt_version: str
     cache_hit: bool = False  # answered from the response cache, no LLM call
+    audience: Audience = Audience.DEFAULT  # tier the prompt was framed for
+    audience_rule: str = "default"  # which rule of the resolver chose it
 
 
 class PromptContextResponse(BaseModel):

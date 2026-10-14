@@ -1,0 +1,78 @@
+[
+  {
+    "id": "web-saas-booking-medium-es",
+    "description": "Portal interno para reservar salas de reuniones con calendario, avisos por email y login corporativo con SSO. Unos 300 empleados, tres oficinas.",
+    "project_type": "web_saas",
+    "detail_level": "medium",
+    "output_format": "line_items",
+    "language": "es",
+    "min_hours": 150,
+    "max_hours": 700,
+    "expected_keywords": ["calendario", "email", "SSO"]
+  },
+  {
+    "id": "mobile-delivery-detailed-en",
+    "description": "Mobile app for a local restaurant chain: browse the menu, place delivery orders, pay by card, track the courier on a map and receive push notifications. iOS and Android.",
+    "project_type": "mobile_app",
+    "detail_level": "detailed",
+    "output_format": "phases_table",
+    "language": "en",
+    "min_hours": 400,
+    "max_hours": 1800,
+    "expected_keywords": ["payment", "push", "map", "iOS", "Android"]
+  },
+  {
+    "id": "data-pipeline-summary-en",
+    "description": "Nightly ETL that ingests sales CSV files from an SFTP server, cleans and deduplicates them, loads them into a data warehouse and refreshes a dashboard.",
+    "project_type": "data_pipeline",
+    "detail_level": "summary",
+    "output_format": "narrative",
+    "language": "en",
+    "min_hours": 80,
+    "max_hours": 500,
+    "expected_keywords": ["ETL", "warehouse", "dashboard"]
+  },
+  {
+    "id": "internal-tool-inventory-es",
+    "description": "Herramienta interna para gestionar el inventario de un almacén: altas y bajas de productos, lectura de códigos de barras, alertas de stock mínimo e informes mensuales en Excel.",
+    "project_type": "internal_tool",
+    "detail_level": "medium",
+    "output_format": "phases_table",
+    "language": "es",
+    "min_hours": 120,
+    "max_hours": 600,
+    "expected_keywords": ["inventario", "stock", "informes"]
+  },
+  {
+    "id": "web-saas-marketplace-detailed-es",
+    "description": "Marketplace B2B donde proveedores publican catálogos, los compradores piden presupuestos, se negocian precios por chat y se cobra con Stripe. Panel de administración y facturación incluidos.",
+    "project_type": "web_saas",
+    "detail_level": "detailed",
+    "output_format": "line_items",
+    "language": "es",
+    "min_hours": 600,
+    "max_hours": 3000,
+    "expected_keywords": ["catálogo", "Stripe", "chat", "facturación"]
+  },
+  {
+    "id": "mobile-fitness-summary-en",
+    "description": "Fitness companion app: workout plans, progress charts, Apple Health and Google Fit sync, and a subscription paywall.",
+    "project_type": "mobile_app",
+    "detail_level": "summary",
+    "output_format": "narrative",
+    "language": "en",
+    "min_hours": 250,
+    "max_hours": 1200,
+    "expected_keywords": ["subscription", "sync", "workout"]
+  },
+  {
+    "id": "insufficient-information-en",
+    "description": "We want something like Uber but different. Please tell us how much it costs.",
+    "project_type": "web_saas",
+    "detail_level": "summary",
+    "output_format": "narrative",
+    "language": "en",
+    "insufficient_information": true,
+    "expected_keywords": ["insufficient"]
+  }
+]

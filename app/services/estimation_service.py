@@ -6,7 +6,14 @@ output check -> store. Only answers that completed and passed the output check a
 Session turns (``prepare_session_turn`` + ``generate_for_session``) skip both caches: their
 prompt also carries the session's history and project metadata, which the cache key does not
 cover, so a hit could replay an answer built on another conversation. After the answer, the turn
-is added to the history window and the metadata is updated for the next turn.
+is added to the history window, turns that overflow it are compressed (anchors kept verbatim,
+the rest folded into a summary) and the metadata is updated for the next turn.
+
+Every path resolves the audience tier first (``services/audience.py``) and carries it on the
+request, so the prompt block and both cache keys see the same tier. A non-default tier changes the
+exact key and the semantic bucket, so two tiers never share an answer.
+
+``generate_with_critic`` (critic review loop) also skips both caches and delegates the loop to ``ReviewLoop``.
 """
 
 from collections.abc import Iterator, Sequence
@@ -17,14 +24,20 @@ import structlog
 
 from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
+from app.services.audience import AudienceResolution, resolve_audience
+from app.services.review_loop import ReviewLoop, ReviewLoopResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
 from app.services.cache.semantic import NoOpSemanticCache, SemanticCache, SemanticLookup
 from app.services.attachments import Attachment, build_description, display_name
+from app.schemas.critic import CriticFeedback, CriticIssue, CriticVerdict
+from app.services.critic import Critic
 from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
 from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
+from app.services.history_compression import HistoryCompressor
 from app.services.metadata_extractor import MetadataExtractor
 from app.services.sessions import Session, TurnRecord
+from app.services.summarizer import ConversationSummarizer
 
 __all__ = ["PROMPT_VERSION", "EstimationService", "SessionTurn"]
 
@@ -56,8 +69,14 @@ class EstimationService:
         cache_models: Sequence[str] | None = None,
         semantic_cache: SemanticCache | None = None,
         metadata_extractor: MetadataExtractor | None = None,
+        history_compressor: HistoryCompressor | None = None,
+        critic: Critic | None = None,
+        review_loop: ReviewLoop | None = None,
     ) -> None:
         self._provider = provider
+        self._critic = critic or Critic(provider)
+        self._review_loop = review_loop or ReviewLoop()
+        self._history_compressor = history_compressor or HistoryCompressor(ConversationSummarizer(provider))
         self._metadata_extractor = metadata_extractor or MetadataExtractor(provider)
         self._guardrails = guardrails or InputGuardrails()
         self._cache = cache if cache is not None else NoOpCache()
@@ -76,6 +95,16 @@ class EstimationService:
     def context_examples(self, prompt_version: str = PROMPT_VERSION) -> str:
         """CAG examples the model receives in the system prompt (Markdown)."""
         return render_estimation_examples(prompt_version)
+
+    @staticmethod
+    def resolve_audience(request: EstimationRequest, session: Session | None = None) -> AudienceResolution:
+        """Tier and rule for a prepared request (pure regexes, so cheap to call more than once)."""
+        return resolve_audience(request.description, request.audience, session.metadata if session else None)
+
+    @classmethod
+    def _with_audience(cls, request: EstimationRequest, session: Session | None = None) -> EstimationRequest:
+        """The request carrying the *resolved* tier: prompts and both cache keys read it from there."""
+        return request.model_copy(update={"audience": cls.resolve_audience(request, session).audience})
 
     def prepare(self, request: EstimationRequest) -> EstimationRequest:
         """Runs the input guardrails; returns the request with the sanitized description.
@@ -114,6 +143,7 @@ class EstimationService:
         metrics: GenerationMetrics | None = None,
     ) -> str:
         """Returns the estimate; ``metrics.cache_hit`` is set when it came from a cache."""
+        request = self._with_audience(request)
         key = make_cache_key(request, prompt_version, self._cache_models)
         cached = self._cache.get(key)
         if cached is not None:
@@ -133,6 +163,25 @@ class EstimationService:
             self._store(key, semantic, CachedAnswer(text=text))
         return text
 
+    def generate_with_critic(self, request: EstimationRequest, prompt_version: str = PROMPT_VERSION) -> ReviewLoopResult:
+        """Critic review loop: the estimate is audited and regenerated until accepted or out of budget.
+
+        Expects a prepared request. Both caches are bypassed: the result depends on the Critic's
+        judgement of each attempt, and a cache hit would skip the very loop the caller asked for. The
+        output check runs on the final answer only (logged, as on ``generate``).
+        """
+
+        request = self._with_audience(request)
+
+        def actor(feedback: CriticFeedback | None) -> str:
+            issues = feedback.issues if feedback else None
+            system, user = render_estimation_prompt(request, prompt_version, critic_feedback=issues)
+            return self._provider.complete(system, user)
+
+        result = self._review_loop.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        self._passes_output_check(request, result.estimate, prompt_version)
+        return result
+
     def generate_for_session(
         self,
         turn: SessionTurn,
@@ -141,19 +190,73 @@ class EstimationService:
     ) -> str:
         """One session turn: the history window + the new message, then update history and metadata.
 
-        The system prompt is rebuilt every turn from the current ``project_metadata``. No caching
-        (see the module docstring). A failed metadata extraction keeps the old facts.
+        The system prompt is rebuilt every turn from the current ``project_metadata`` and the memory
+        of the turns that left the window. No caching (see the module docstring). A failed metadata
+        extraction or summary keeps the old facts / summary.
         """
-        request = turn.request
-        system, user = render_estimation_prompt(request, prompt_version, project_metadata=session.metadata)
-        messages = [*session.history.to_messages_list(system), {"role": "user", "content": user}]
-        text = self._provider.complete_messages(messages)
-        self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
+        request = self._begin_session_turn(turn, session)
+        text = self._provider.complete_messages(self._session_messages(request, session, prompt_version))
+        self._record_session_turn(turn, request, session, text, prompt_version)
+        return text
 
+    def generate_for_session_with_critic(
+        self,
+        turn: SessionTurn,
+        session: Session,
+        prompt_version: str = PROMPT_VERSION,
+    ) -> ReviewLoopResult:
+        """Critic review loop on a session turn; only the final estimate is recorded, as a normal turn.
+
+        The actor sends what ``generate_for_session`` would (current memory, history window and
+        message), plus the ``critic_feedback`` block on retries. The session is not touched until the
+        loop ends, so every attempt sees the same history. Caches are bypassed, as for a session turn.
+        """
+        request = self._begin_session_turn(turn, session)
+
+        def actor(feedback: CriticFeedback | None) -> str:
+            issues = feedback.issues if feedback else None
+            return self._provider.complete_messages(self._session_messages(request, session, prompt_version, issues))
+
+        result = self._review_loop.run(actor, lambda estimate: self._critic.review(request.description, estimate))
+        self._record_session_turn(turn, request, session, result.estimate, prompt_version, result.final_verdict)
+        return result
+
+    def _begin_session_turn(self, turn: SessionTurn, session: Session) -> EstimationRequest:
+        """The turn's request carrying the resolved tier, which is also stored on the session."""
+        resolution = self.resolve_audience(turn.request, session)
+        session.last_audience, session.last_audience_rule = resolution.audience, resolution.rule
+        return turn.request.model_copy(update={"audience": resolution.audience})
+
+    @staticmethod
+    def _session_messages(
+        request: EstimationRequest,
+        session: Session,
+        prompt_version: str,
+        critic_feedback: Sequence[CriticIssue] | None = None,
+    ) -> list[dict[str, str]]:
+        system, user = render_estimation_prompt(
+            request,
+            prompt_version,
+            project_metadata=session.metadata,
+            history_memory=session.history.memory,
+            critic_feedback=critic_feedback,
+        )
+        return [*session.history.to_messages_list(system), {"role": "user", "content": user}]
+
+    def _record_session_turn(
+        self,
+        turn: SessionTurn,
+        request: EstimationRequest,
+        session: Session,
+        text: str,
+        prompt_version: str,
+        final_verdict: CriticVerdict | None = None,
+    ) -> None:
+        self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
         _, history_user = render_estimation_prompt(
             request.model_copy(update={"description": turn.history_description}), prompt_version
         )
-        session.record_turn(
+        evicted = session.record_turn(
             history_user,
             text,
             TurnRecord(
@@ -161,12 +264,13 @@ class EstimationService:
                 attachment_names=turn.attachment_names,
                 estimate=text,
                 prompt_version=prompt_version,
+                final_verdict=final_verdict,
             ),
         )
+        self._history_compressor.compress(session.history, evicted, request.language.value)
         session.metadata = self._metadata_extractor.update(
             session.metadata, request.description, text, request.language.value
         )
-        return text
 
     def generate_stream(
         self,
@@ -175,6 +279,7 @@ class EstimationService:
         prompt_version: str = PROMPT_VERSION,
     ) -> Iterator[str]:
         started_at = perf_counter()
+        request = self._with_audience(request)
         key = make_cache_key(request, prompt_version, self._cache_models)
         cached = self._cache.get(key)
         semantic = SemanticLookup(bucket="")

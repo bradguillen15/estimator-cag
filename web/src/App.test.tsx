@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { checkHealth, createSession, createSessionEstimate, getPromptContext, getSession, listSessions } from './api/client'
+import { checkHealth, createSession, createSessionEstimate, createSessionReviewedEstimate, getPromptContext, getSession, listSessions } from './api/client'
 import { METADATA, pdf, sessionDetail, sessionEstimate, sessionSummary, sessionTurn } from './test/fixtures'
 
 vi.mock('./api/client', async (importOriginal) => ({
@@ -12,6 +12,7 @@ vi.mock('./api/client', async (importOriginal) => ({
   getPromptContext: vi.fn(),
   createSession: vi.fn(),
   createSessionEstimate: vi.fn(),
+  createSessionReviewedEstimate: vi.fn(),
   getSession: vi.fn(),
   listSessions: vi.fn(),
 }))
@@ -19,6 +20,7 @@ vi.mock('./api/client', async (importOriginal) => ({
 const DESCRIPTION = 'App móvil para reservar clases en un gimnasio.'
 const createSessionMock = vi.mocked(createSession)
 const estimateMock = vi.mocked(createSessionEstimate)
+const reviewedMock = vi.mocked(createSessionReviewedEstimate)
 
 beforeEach(() => {
   // The app defaults to English; most tests here assert the Spanish copy, so start from a saved 'es'.
@@ -27,6 +29,7 @@ beforeEach(() => {
   vi.mocked(getPromptContext).mockResolvedValue({ prompt_version: 'v1', examples_markdown: '' })
   createSessionMock.mockReset()
   estimateMock.mockReset()
+  reviewedMock.mockReset()
   vi.mocked(getSession).mockReset()
   vi.mocked(listSessions).mockReset()
   vi.mocked(listSessions).mockResolvedValue([])
@@ -70,6 +73,39 @@ describe('App', () => {
     expect(within(memory).getByText('React')).toBeInTheDocument()
     expect(within(memory).getByText('FastAPI')).toBeInTheDocument()
     expect(screen.getByText('1 turno')).toBeInTheDocument()
+  })
+
+  it('routes a turn through the critic review when the toggle is on, with loading text and verdict', async () => {
+    let resolve!: (value: Awaited<ReturnType<typeof createSessionReviewedEstimate>>) => void
+    reviewedMock.mockReturnValue(new Promise((r) => (resolve = r)))
+    const user = await fillForm()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Revisión con crítico' }))
+    await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
+
+    expect(await screen.findByText('Revisando con el crítico…', { selector: 'p' })).toBeInTheDocument()
+    resolve({
+      ...sessionEstimate({ text: '## Estimación: Gimnasio' }),
+      final_verdict: 'needs_iteration',
+      iterations: [{ attempt: 1, verdict: 'needs_iteration', issues: [] }],
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Estimación: Gimnasio' })).toBeInTheDocument()
+    expect(screen.getAllByText('Requiere iteración (presupuesto agotado)').length).toBeGreaterThan(0)
+    expect(screen.getByText('Revisiones')).toBeInTheDocument()
+    expect(estimateMock).not.toHaveBeenCalled()
+    expect(reviewedMock).toHaveBeenCalledWith('abcdef123456', expect.objectContaining({ description: DESCRIPTION }), [], expect.any(AbortSignal))
+  })
+
+  it('keeps the normal endpoint when the critic review toggle is off', async () => {
+    estimateMock.mockResolvedValue(sessionEstimate({ text: '## Estimación: Gimnasio' }))
+    const user = await fillForm()
+
+    await user.click(screen.getByRole('button', { name: 'Generar estimación' }))
+
+    expect(await screen.findByRole('heading', { name: 'Estimación: Gimnasio' })).toBeInTheDocument()
+    expect(reviewedMock).not.toHaveBeenCalled()
+    expect(screen.queryByText('Revisiones')).not.toBeInTheDocument()
   })
 
   it('starts a new conversation: new session, cleared result and form', async () => {

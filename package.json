@@ -18,6 +18,7 @@
     "lint": "pnpm --filter estimator-web lint",
     "test": "pnpm run test:api && pnpm run test:web",
     "test:api": "uv run pytest",
+    "evals": "uv run python -m evals.run",
     "test:web": "pnpm --filter estimator-web test",
     "test:watch": "pnpm --filter estimator-web test:watch",
     "test:coverage": "uv run pytest --cov=app --cov-report=term-missing && pnpm --filter estimator-web test:coverage"

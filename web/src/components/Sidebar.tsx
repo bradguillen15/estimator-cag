@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { API_LABEL, checkHealth, getPromptContext } from '../api/client'
 import type { ProjectMetadata, PromptContext, ResponseLanguage, SessionSummary } from '../api/types'
 import { useT } from '../i18n/useLocale'
-import type { SessionInfo } from '../hooks/useSession'
+import type { SessionInfo, SessionMemory } from '../hooks/useSession'
 import type { Theme } from '../hooks/useTheme'
 import { Chevron, Plus, RulerMeasure } from './icons'
 import { LanguageToggle } from './LanguageToggle'
@@ -64,6 +64,8 @@ export function Sidebar({
       <SessionList sessions={sessions} activeId={session.id} busy={busy} onSelect={onSelectSession} />
 
       <MemoryPanel metadata={session.metadata} />
+
+      <SessionContext memory={session.memory} />
 
       <section>
         <SectionTitle hint={t('sidebar.cag.hint')}>{t('sidebar.cag')}</SectionTitle>
@@ -198,6 +200,32 @@ function MemoryPanel({ metadata }: { metadata: ProjectMetadata }) {
           </dl>
         )}
       </div>
+    </section>
+  )
+}
+
+function SessionContext({ memory }: { memory?: SessionMemory }) {
+  const t = useT()
+  if (!memory || (memory.anchors === 0 && memory.summaryChars === 0 && memory.audience === null)) return null
+
+  return (
+    <section>
+      <SectionTitle>{t('sidebar.session.context')}</SectionTitle>
+      <dl className="flex flex-col gap-3 rounded-[14px] bg-field px-3 py-3 text-[13px] shadow-[0_0_0_1px_var(--line)]">
+        <Fact label={t('sidebar.session.context.anchors')}>{memory.anchors}</Fact>
+        {memory.summaryChars > 0 && (
+          <Fact label={t('sidebar.session.context.summary')}>
+            {t('sidebar.session.context.summaryChars', { count: memory.summaryChars })}
+          </Fact>
+        )}
+        {memory.audience && (
+          <Fact label={t('sidebar.session.context.audience')}>
+            <span title={memory.audienceRule ? t('result.audience.rule', { rule: memory.audienceRule }) : undefined}>
+              {t(`audience.${memory.audience}`)}
+            </span>
+          </Fact>
+        )}
+      </dl>
     </section>
   )
 }
