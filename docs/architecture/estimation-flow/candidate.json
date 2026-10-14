@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "8cfae9b92221e719d6adf5f2e3f15db24a63bacd"
+      "revision": "ef33a1cf75e245101dc15d8dc35b38bab9e54d37"
     }
   },
   "components": [
@@ -92,7 +92,7 @@
       "id": "router",
       "type": "backend",
       "label": "Estimations router",
-      "sublabel": "/api/v1/estimate[/stream|/acb]",
+      "sublabel": "/estimate[/stream|/reviewed]",
       "tag": "JSON or SSE",
       "pos": [
         540,
@@ -411,11 +411,11 @@
       ]
     },
     {
-      "id": "acb",
+      "id": "review",
       "type": "backend",
-      "label": "Actor-Critic-Boss",
-      "sublabel": "Boss loop + Critic audit",
-      "tag": "/estimate/acb, caches bypassed",
+      "label": "Critic review loop",
+      "sublabel": "ReviewLoop + Critic audit",
+      "tag": "stateless + session, no cache",
       "pos": [
         1060,
         590
@@ -426,7 +426,7 @@
       ],
       "sources": [
         {
-          "path": "app/services/boss.py",
+          "path": "app/services/review_loop.py",
           "line": 39,
           "end_line": 58
         },
@@ -438,7 +438,7 @@
         {
           "path": "app/services/estimation_service.py",
           "line": 166,
-          "end_line": 183
+          "end_line": 222
         }
       ]
     },
@@ -584,16 +584,16 @@
       "toSide": "right"
     },
     {
-      "id": "service-to-acb",
+      "id": "service-to-review",
       "from": "service",
-      "to": "acb",
+      "to": "review",
       "label": "critic loop",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "id": "acb-to-llm",
-      "from": "acb",
+      "id": "review-to-llm",
+      "from": "review",
       "to": "llm",
       "label": "critic audit",
       "fromSide": "top",
@@ -638,10 +638,10 @@
     },
     {
       "dot": "rose",
-      "title": "Actor-Critic-Boss",
+      "title": "Critic review loop",
       "items": [
-        "POST /estimate/acb: the Actor drafts, the Critic (CRITIC_MODEL or the main chain) audits, the Boss re-calls the Actor with the issues",
-        "Stops on accept or reject, or after BOSS_MAX_ITERATIONS attempts; both caches are bypassed",
+        "POST /estimate/reviewed and /sessions/{id}/estimate/reviewed: the Actor drafts, the Critic (CRITIC_MODEL or the main chain) audits, the ReviewLoop re-calls the Actor with the issues",
+        "Stops on accept or reject, or after REVIEW_MAX_ITERATIONS attempts; both caches are bypassed",
         "A failed review accepts the draft instead of failing the request"
       ]
     },
