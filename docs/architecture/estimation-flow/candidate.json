@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "ef33a1cf75e245101dc15d8dc35b38bab9e54d37"
+      "revision": "2d8d2fcb2b6d4b9ba5a27db1e10f5ff6c599defd"
     }
   },
   "components": [
@@ -371,7 +371,7 @@
       "id": "openai",
       "type": "external",
       "label": "OpenAI API",
-      "sublabel": "fallback model",
+      "sublabel": "fallback model + embeddings",
       "pos": [
         1550,
         400
@@ -385,6 +385,11 @@
           "path": "app/services/llm/factory.py",
           "line": 17,
           "end_line": 21
+        },
+        {
+          "path": "app/embedding_pipeline/embedder.py",
+          "line": 85,
+          "end_line": 85
         }
       ]
     },
@@ -466,6 +471,59 @@
           "path": "app/services/summarizer.py",
           "line": 26,
           "end_line": 49
+        }
+      ]
+    },
+    {
+      "id": "embedcaller",
+      "type": "external",
+      "label": "Budget JSON caller",
+      "sublabel": "Swagger / curl",
+      "pos": [
+        1280,
+        590
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/schemas.py",
+          "line": 78,
+          "end_line": 82
+        }
+      ]
+    },
+    {
+      "id": "embeddings",
+      "type": "backend",
+      "label": "Embedding pipeline",
+      "sublabel": "POST /embeddings/ingest",
+      "tag": "1 component = 1 chunk",
+      "pos": [
+        1550,
+        590
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/router.py",
+          "line": 19,
+          "end_line": 60
+        },
+        {
+          "path": "app/embedding_pipeline/chunker.py",
+          "line": 25,
+          "end_line": 65
+        },
+        {
+          "path": "app/embedding_pipeline/embedder.py",
+          "line": 41,
+          "end_line": 91
         }
       ]
     }
@@ -614,6 +672,20 @@
       "label": "fold into summary",
       "fromSide": "bottom",
       "toSide": "top"
+    },
+    {
+      "id": "embedcaller-to-embeddings",
+      "from": "embedcaller",
+      "to": "embeddings",
+      "label": "budgets JSON"
+    },
+    {
+      "id": "embeddings-to-openai",
+      "from": "embeddings",
+      "to": "openai",
+      "label": "batches of 100",
+      "fromSide": "top",
+      "toSide": "bottom"
     }
   ],
   "cards": [
@@ -668,6 +740,14 @@
         "Exact and semantic cache need Redis (CACHE_ENABLED, SEMANTIC_CACHE_ENABLED)",
         "Semantic cache and moderation call OpenAI through LiteLLM",
         "Sessions live in one process: a restart loses them"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Embedding pipeline (session 7)",
+      "items": [
+        "Each budget component becomes one chunk with its parent budget as a header; vectors (text-embedding-3-small, 1536 dims) are returned, not stored",
+        "Follows the course reference layout: openai SDK called directly, mounted without /api/v1; compare.py reuses the same embedder"
       ]
     }
   ]

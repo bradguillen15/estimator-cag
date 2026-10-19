@@ -38,7 +38,7 @@ HTTP). Persistence (pgvector) is session 8.
 - [x] T3 Run sanity pairs (billed, ~$0.000001) and write SANITY_CHECK.md (inline)
 
 - [x] T4 Opt-in API container (Dockerfile, .dockerignore, compose profile `api`) so compare.py runs inside it (inline)
-- [ ] T5 Update the archify overview diagram with the embedding pipeline box
+- [x] T5 Update the archify overview diagram with the embedding pipeline box (inline)
 
 ## Progress
 
@@ -49,3 +49,4 @@ HTTP). Persistence (pgvector) is session 8.
 - Literal deviations kept (AGENTS.md §7 #12). Pending/user decisions: deliverable branch name in the brief is `session-07/pre-exercise`
   (we use `session_7`); push/PR.
 - T4: image builds; container `/health` ok, `/embeddings/ingest` in OpenAPI, `compare.py` inside → 0.6329.
+- T5: archify finalize passed all 4 gates (validate, deliver, check, browser-check); 3 pre-existing crossings, none on new nodes; no perceptual review.
