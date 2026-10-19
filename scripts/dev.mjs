@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Runs the API (FastAPI on :8000) and the UI (Vite on :5173) together, with prefixed logs.
 // Ctrl+C stops both; if either process exits, the other one is stopped too.
+// Postgres (ingestion jobs + pseudonym mappings) is always started via Docker and migrated
+// (`alembic upgrade head`) before the API; Redis only when a cache flag is enabled. Both are stopped
+// on exit only if this script started them.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { parseEnv } from 'node:util'
@@ -13,9 +16,11 @@ const PROCESSES = [
 const children = []
 let stopping = false
 let redisStartedHere = false
+let postgresStartedHere = false
 
 const TRUTHY = new Set(['1', 'true', 'yes', 'on'])
 const REDIS_LABEL = '\x1b[31m[redis]\x1b[0m'
+const POSTGRES_LABEL = '\x1b[34m[postgres]\x1b[0m'
 
 // Mirrors the app: a real env var wins over `.env`. Values are never printed.
 function cacheEnabled() {
@@ -59,6 +64,39 @@ function stopRedis() {
   spawnSync('docker', ['compose', 'stop', 'redis'], { stdio: 'ignore', shell: process.platform === 'win32' })
 }
 
+function startPostgres() {
+  process.stdout.write(`${POSTGRES_LABEL} starting Postgres via Docker…\n`)
+  const result = spawnSync('docker', ['compose', 'up', '-d', '--wait', 'estimator-postgres'], {
+    stdio: 'ignore',
+    shell: process.platform === 'win32',
+  })
+  if (result.status !== 0) {
+    process.stderr.write(`${POSTGRES_LABEL} warning: could not start Postgres (is Docker installed and running?); the ingestion endpoints will fail\n`)
+    return
+  }
+  postgresStartedHere = true
+  process.stdout.write(`${POSTGRES_LABEL} ready on localhost:5433; applying migrations…\n`)
+  const migration = spawnSync('uv', ['run', 'alembic', 'upgrade', 'head'], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  })
+  for (const [stream, target] of [[migration.stdout, process.stdout], [migration.stderr, process.stderr]]) {
+    for (const line of (stream ?? '').split('\n')) if (line) target.write(`${POSTGRES_LABEL} ${line}\n`)
+  }
+  if (migration.status === 0) {
+    process.stdout.write(`${POSTGRES_LABEL} migrations up to date\n`)
+  } else {
+    process.stderr.write(`${POSTGRES_LABEL} warning: migrations failed; the ingestion endpoints may fail\n`)
+  }
+}
+
+function stopPostgres() {
+  if (!postgresStartedHere) return
+  postgresStartedHere = false
+  process.stdout.write(`${POSTGRES_LABEL} stopping…\n`)
+  spawnSync('docker', ['compose', 'stop', 'estimator-postgres'], { stdio: 'ignore', shell: process.platform === 'win32' })
+}
+
 function pipeWithPrefix(stream, target, label) {
   let pending = ''
   stream.setEncoding('utf8')
@@ -78,9 +116,11 @@ function stopAll(exitCode) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
   }
   stopRedis()
+  stopPostgres()
 }
 
 startRedis()
+startPostgres()
 
 for (const { name, color, command, args } of PROCESSES) {
   const label = `\x1b[${color}m[${name}]\x1b[0m`

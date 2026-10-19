@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # maximum number of actor attempts (each costs one actor call plus one critic call).
     critic_model: str = ""
     review_max_iterations: int = Field(default=3, ge=1)
+    # Ingestion (Session 6): Postgres for jobs and pseudonym mappings, catalog + seed data locations,
+    # PII detection/pseudonymization knobs. PSEUDONYM_HASH_SALT must be overridden outside development.
+    database_url: str = "postgresql+psycopg://estimator:estimator@localhost:5433/estimator"
+    catalog_path: str = "data/catalog/catalog.yaml"
+    ingestion_data_root: str = "data/seed"
+    presidio_spacy_model: str = "es_core_news_md"
+    pseudonym_faker_locale: str = "es_ES"
+    pseudonym_hash_salt: str = "change-me-in-prod"
     app_env: str
     log_level: str
 

@@ -14,6 +14,8 @@ os.environ.update(
         "MODERATION_ENABLED": "false",
         "CACHE_ENABLED": "false",
         "SEMANTIC_CACHE_ENABLED": "false",
+        # Never touch a real database from tests (nothing connects at import time anyway).
+        "DATABASE_URL": "postgresql+psycopg://test:test@localhost:1/test",
     }
 )
 
