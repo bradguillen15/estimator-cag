@@ -1,13 +1,20 @@
 """FastAPI dependency providers (``Depends``); override them in tests via ``dependency_overrides``."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Annotated
 
 import structlog
 from fastapi import Depends, File, Form, Query, UploadFile
+from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 from app.exceptions import UnknownPromptVersionError
+from app.persistence.database import build_engine, build_session_factory
+from app.persistence.repositories.jobs import sql_jobs_scope
+from app.persistence.repositories.mappings import PostgresMappingStore
 from app.prompts.loader import PROMPT_VERSION, available_prompt_versions
 from app.schemas.estimations import Audience, DetailLevel, EstimationRequest, OutputFormat, ProjectType
 from app.services.attachments import MAX_ATTACHMENT_BYTES, Attachment, check_attachment_count
@@ -17,6 +24,11 @@ from app.services.review_loop import ReviewLoop
 from app.services.critic import Critic
 from app.services.estimation_service import EstimationService, SessionTurn
 from app.services.guardrails.input import InputGuardrails
+from app.services.ingestion.catalog import DataCatalog, load_catalog
+from app.services.ingestion.loaders import FileSystemLoader
+from app.services.ingestion.orchestrator import IngestionService, JobsScope
+from app.services.ingestion.parsers import ParserRegistry, default_registry
+from app.services.ingestion.pii import ConsistentPseudonymizer, build_analyzer
 from app.services.history_compression import HistoryCompressor
 from app.services.llm.base import LLMProvider, ModerationProvider
 from app.services.llm.factory import get_critic_provider, get_embedder, get_llm_provider, get_moderator
@@ -152,3 +164,61 @@ def get_safe_session_request(
         for upload in uploads
     ]
     return service.prepare_session_turn(request, files)
+
+
+# --- Ingestion (Session 6). Nothing below touches the DB, spaCy or disk at import time. ---
+
+
+@lru_cache
+def get_catalog() -> DataCatalog:
+    return load_catalog(settings.catalog_path)
+
+
+@lru_cache
+def get_filesystem_loader() -> FileSystemLoader:
+    return FileSystemLoader(settings.ingestion_data_root)
+
+
+@lru_cache
+def get_parser_registry() -> ParserRegistry:
+    return default_registry()
+
+
+@lru_cache
+def get_db_session_factory() -> sessionmaker[DbSession]:
+    """Engine + session factory, built on first use (the engine itself connects lazily)."""
+    return build_session_factory(build_engine(settings.database_url))
+
+
+@lru_cache
+def get_jobs_scope() -> JobsScope:
+    """Unit of work for jobs: every ``with scope()`` gets its own session, so background runs never share a request session."""
+    return sql_jobs_scope(get_db_session_factory())
+
+
+def get_ingestion_service(
+    catalog: Annotated[DataCatalog, Depends(get_catalog)],
+    loader: Annotated[FileSystemLoader, Depends(get_filesystem_loader)],
+    registry: Annotated[ParserRegistry, Depends(get_parser_registry)],
+    jobs_scope: Annotated[JobsScope, Depends(get_jobs_scope)],
+) -> IngestionService:
+    return IngestionService(catalog=catalog, loader=loader, registry=registry, jobs_scope=jobs_scope)
+
+
+@contextmanager
+def build_pseudonymizer() -> Iterator[ConsistentPseudonymizer]:
+    """Pseudonymizer backed by Postgres mappings, for the PII step of the pipeline.
+
+    No endpoint uses it yet. It is a context manager because the mapping store needs an open DB
+    session for as long as the pseudonymizer is used; loading the spaCy model happens here, not at import.
+    """
+    session = get_db_session_factory()()
+    try:
+        yield ConsistentPseudonymizer(
+            analyzer=build_analyzer(settings.presidio_spacy_model),
+            mapping_store=PostgresMappingStore(session),
+            salt=settings.pseudonym_hash_salt,
+            faker_locale=settings.pseudonym_faker_locale,
+        )
+    finally:
+        session.close()

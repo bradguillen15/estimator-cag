@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, cast
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.persistence.models import IngestionJobRow
 from app.services.ingestion.jobs import Job, JobStatusName
@@ -62,6 +64,20 @@ class SqlJobsRepository:
         for key, value in fields.items():
             setattr(row, key, value)
         self._session.commit()
+
+
+def sql_jobs_scope(session_factory: sessionmaker[Session]) -> Any:
+    """Return a ``JobsScope``: each ``with scope() as repo`` opens and closes its own session."""
+
+    @contextmanager
+    def scope() -> Iterator[SqlJobsRepository]:
+        session = session_factory()
+        try:
+            yield SqlJobsRepository(session)
+        finally:
+            session.close()
+
+    return scope
 
 
 def _to_job(row: IngestionJobRow) -> Job:
