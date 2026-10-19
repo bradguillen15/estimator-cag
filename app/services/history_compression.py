@@ -18,6 +18,7 @@ import structlog
 
 from app.schemas.sessions import TurnPair
 from app.services.sessions import ConversationHistory
+from app.services.llm.base import UsageTotals
 from app.services.summarizer import ConversationSummarizer
 
 logger = structlog.get_logger()
@@ -92,7 +93,13 @@ class HistoryCompressor:
     def __init__(self, summarizer: ConversationSummarizer) -> None:
         self._summarizer = summarizer
 
-    def compress(self, history: ConversationHistory, evicted: Sequence[TurnPair], language: str = "es") -> None:
+    def compress(
+        self,
+        history: ConversationHistory,
+        evicted: Sequence[TurnPair],
+        language: str = "es",
+        usage: UsageTotals | None = None,
+    ) -> None:
         """Keeps anchors verbatim in ``history`` and folds the rest into ``history.summary``."""
         if not evicted:
             return
@@ -106,7 +113,7 @@ class HistoryCompressor:
             else:
                 to_fold.append(pair)
         if to_fold:
-            history.summary = self._summarizer.summarize(history.summary, to_fold, language)
+            history.summary = self._summarizer.summarize(history.summary, to_fold, language, usage)
         logger.info(
             "history_compressed",
             anchored=len(evicted) - len(to_fold),

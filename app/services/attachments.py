@@ -44,8 +44,10 @@ class Attachment:
     content: bytes
 
 
-def build_description(transcript: str, attachments: Sequence[Attachment]) -> str:
+def build_description(transcript: str, attachments: Sequence[Attachment]) -> tuple[str, int]:
     """The transcript followed by the text of each attachment, under a clear separator.
+
+    Returns that description and the total chars of raw extracted attachment text (0 without files).
 
     Raises ``AttachmentError`` on too many/too large files, an unsupported or unreadable file,
     a file without extractable text, or too much extracted text overall.
@@ -66,7 +68,7 @@ def build_description(transcript: str, attachments: Sequence[Attachment]) -> str
         sections.append(f"--- attachment: {name} ---\n{text}")
         logger.info("attachment_extracted", filename=name, chars=len(text))
 
-    return "\n\n".join([transcript, *sections])
+    return "\n\n".join([transcript, *sections]), total_chars
 
 
 def extract_text(filename: str, content: bytes) -> str:

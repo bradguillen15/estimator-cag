@@ -22,7 +22,7 @@ from app.exceptions import LLMProviderError
 from app.prompts.loader import render_metadata_prompt
 from app.schemas.sessions import ProjectMetadata
 from app.services.guardrails.input import prompt_injection_pattern
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, UsageTotals, complete_tracked
 
 logger = structlog.get_logger()
 
@@ -39,15 +39,21 @@ class MetadataExtractor:
         self._provider = provider
 
     def update(
-        self, known: ProjectMetadata, description: str, estimate: str, language: str = "es"
+        self,
+        known: ProjectMetadata,
+        description: str,
+        estimate: str,
+        language: str = "es",
+        usage: UsageTotals | None = None,
     ) -> ProjectMetadata:
         """The known facts merged with what this turn adds; ``known`` itself on any failure.
 
-        ``language`` is the response language the facts are written in.
+        ``language`` is the response language the facts are written in; ``usage`` (optional)
+        accumulates the tokens and cost of the call.
         """
         system, user = render_metadata_prompt(known, description, estimate, language)
         try:
-            raw = self._provider.complete(system, user)
+            raw = complete_tracked(self._provider, system, user, usage)
             extracted = ProjectMetadata.model_validate_json(_FENCE_RE.sub("", raw.strip()))
         except (LLMProviderError, ValidationError, json.JSONDecodeError) as exc:
             logger.warning("metadata_extraction_failed", error_type=type(exc).__name__)

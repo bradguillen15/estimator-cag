@@ -58,6 +58,9 @@ def get_session_detail(session: CurrentSession) -> SessionDetail:
         history_turns=len(session.history),
         anchors_count=len(session.history.anchors),
         summary_chars=len(session.history.summary),
+        summary=session.history.summary,
+        anchors=[pair.user for pair in session.history.anchors],
+        last_observation=session.last_observation,
         last_audience=session.last_audience,
         last_audience_rule=session.last_audience_rule,
         turns=[
@@ -91,6 +94,7 @@ def create_session_estimate(
         prompt_version=prompt_version,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        observation=session.last_observation,
         audience=session.last_audience or Audience.DEFAULT,
         audience_rule=session.last_audience_rule or "default",
     )
@@ -110,6 +114,7 @@ def create_session_reviewed_estimate(
         prompt_version=prompt_version,
         project_metadata=session.metadata,
         history_turns=len(session.history),
+        observation=session.last_observation,
         audience=session.last_audience or Audience.DEFAULT,
         audience_rule=session.last_audience_rule or "default",
         final_verdict=result.final_verdict,

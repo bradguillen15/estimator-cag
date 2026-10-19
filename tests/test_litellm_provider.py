@@ -126,6 +126,17 @@ def test_complete_messages_sends_the_whole_conversation_with_fallback() -> None:
     assert fake.calls[0]["cache_control_injection_points"] == [{"location": "message", "role": "system"}]
 
 
+def test_complete_messages_fills_the_metrics_of_the_serving_call() -> None:
+    fake = FakeCompletion(_timeout(), _response("A2"))
+    metrics = GenerationMetrics(model="unset")
+
+    _provider(fake).complete_messages([{"role": "user", "content": "U"}], metrics=metrics)
+
+    assert metrics.model == _MODELS[1]
+    assert (metrics.input_tokens, metrics.output_tokens) == (120, 30)
+    assert metrics.latency_seconds is not None and metrics.latency_seconds >= 0
+
+
 def test_complete_falls_back_when_the_primary_fails() -> None:
     fake = FakeCompletion(_timeout(), _response("respuesta de respaldo"))
 

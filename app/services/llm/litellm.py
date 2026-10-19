@@ -120,11 +120,14 @@ class LiteLLMProvider:
         completion = self._completion or litellm.completion
         return completion(**params)
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
-        return self.complete_messages(_messages(system_prompt, user_prompt))
+    def complete(self, system_prompt: str, user_prompt: str, metrics: GenerationMetrics | None = None) -> str:
+        return self.complete_messages(_messages(system_prompt, user_prompt), metrics)
 
-    def complete_messages(self, messages: list[dict[str, str]]) -> str:
-        """Same fallback chain as ``complete``, for a full conversation (system message first)."""
+    def complete_messages(self, messages: list[dict[str, str]], metrics: GenerationMetrics | None = None) -> str:
+        """Same fallback chain as ``complete``, for a full conversation (system message first).
+
+        ``metrics`` (optional) receives the figures of the call that served the answer.
+        """
         call_logger = logger.bind(model=self.model, provider=self.name, stream=False, messages=len(messages))
         call_logger.info("llm_call_started")
         started_at = perf_counter()
@@ -145,14 +148,23 @@ class LiteLLMProvider:
             tokens_in = usage.prompt_tokens if usage else None
             tokens_out = usage.completion_tokens if usage else None
             cached = _cached_tokens(usage)
+            latency_ms = round((perf_counter() - started_at) * 1000, 1)
+            cost = _cost_usd(model, tokens_in, tokens_out, cached)
+            if metrics is not None:
+                metrics.model = model
+                metrics.input_tokens = tokens_in
+                metrics.output_tokens = tokens_out
+                metrics.cached_tokens = cached
+                metrics.cost_usd = cost
+                metrics.latency_seconds = latency_ms / 1000
             call_logger.info(
                 "llm_call_completed",
                 served_model=model,
-                latency_ms=round((perf_counter() - started_at) * 1000, 1),
+                latency_ms=latency_ms,
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 cached_tokens=cached,
-                cost_usd=_cost_usd(model, tokens_in, tokens_out, cached),
+                cost_usd=cost,
                 finish_reason=completion.choices[0].finish_reason,
                 cache_hit=bool(cached),
                 fallback_used=attempt > 0,

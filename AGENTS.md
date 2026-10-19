@@ -36,6 +36,9 @@ sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{i
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
 same window as the history), which the UI uses to rebuild the conversation thread when it switches or resumes
 sessions (active id kept in `localStorage`).
+Every session turn emits one `turn_observed` log event and returns the same measurements as `observation`
+(`TurnObservation`: tokens, cost, latency, memory sizes; also `last_observation` on the session detail), so a
+stress runner needs no log parsing.
 
 Everything in this document exists to keep that flow easy to extend (more providers, more endpoints,
 more context sources) **without rewriting it**.

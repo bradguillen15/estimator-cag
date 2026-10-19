@@ -101,6 +101,29 @@ export interface SessionCreatedResponse {
   session_id: string
 }
 
+/** Per-turn measurements (mirrors schemas/sessions.py TurnObservation); also logged as `turn_observed`. */
+export interface TurnObservation {
+  /** 1-based position in the session; not capped by the history window. */
+  turn_index: number
+  session_id: string
+  enriched_transcript_chars: number
+  attachments_total_chars: number
+  messages_in_window: number
+  anchors_count: number
+  summary_chars: number
+  /** The running summary itself, and the verbatim user messages of the anchored turns. */
+  summary?: string
+  anchors?: string[]
+  last_observation?: TurnObservation | null
+  tokens_in: number
+  tokens_out: number
+  cost_usd: number
+  latency_ms: number
+  /** Always 'none' on session turns: they bypass the response caches. */
+  cache_hit_kind: 'none' | 'exact' | 'semantic'
+  last_resolved_tier: Audience | null
+}
+
 /** One row of GET /sessions: only sessions with at least one turn are listed. */
 export interface SessionSummary {
   session_id: string
@@ -145,6 +168,7 @@ export interface SessionEstimationResponse extends EstimationResponse {
   project_metadata: ProjectMetadata
   /** Turns currently held in the server's sliding history window. */
   history_turns: number
+  observation?: TurnObservation | null
 }
 
 /** POST /sessions/{id}/estimate/reviewed: the session turn plus the Critic's verdict and trail. */

@@ -44,7 +44,7 @@ class ContentAwareProvider:
         self.estimate_calls: list[list[dict[str, str]]] = []
         self.extractions = 0
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, metrics: object = None) -> str:
         if system_prompt.startswith("You extract the facts"):
             self.extractions += 1
             facts: dict[str, object] = {"project_name": "Reservas", "mentioned_technologies": ["React"]}
@@ -57,7 +57,7 @@ class ContentAwareProvider:
             [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
 
-    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+    def complete_messages(self, messages: list[dict[str, str]], metrics: object = None) -> str:
         self.estimate_calls.append(messages)
         hours = 80 if "SSO" in messages[-1]["content"] else 40
         return f"## Estimación: Reservas\n\n**Total estimado: {hours} horas**"
