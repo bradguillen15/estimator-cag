@@ -116,6 +116,7 @@ app/
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
 
+app/embedding_pipeline/  # Session 7 (course reference layout): schemas · chunker (1 component = 1 chunk, tiktoken) · embedder (openai SDK, batches of 100) · router (POST /embeddings/ingest); see §7 #12
 app/persistence/         # Postgres (SQLAlchemy models, engine/session builders, repositories); the only code importing sqlalchemy/psycopg
 alembic/                 # DB migrations (`uv run alembic upgrade head`)
 data/                    # catalog/catalog.yaml + seed/ source files for ingestion
@@ -418,6 +419,7 @@ Fix these opportunistically when you touch the surrounding code; do not replicat
 | 9 | Reference quirks in the validation policy: `BUDGET-2024-0002` int/float dtype gets quarantined, the strict schema flags the `content_hash` column, and nullable `client_name` makes the quarantine path unreachable | `services/ingestion/cleaning/` | Decide the intended behaviour, fix schema/policy, add regression tests |
 | 10 | Live Postgres migration through `scripts/dev.mjs` is not verified in CI (tests never touch Postgres) | `scripts/dev.mjs`, `alembic/` | Add a CI job with a Postgres service that runs `alembic upgrade head` |
 | 11 | The spaCy model (`es_core_news_md`) is not a declared dependency; it needs a manual download | `pyproject.toml`, `pii/analyzer.py` | Pin the model wheel as a dependency or document it in CI/bootstrap |
+| 12 | `embedding_pipeline/` follows the course reference layout: its own router and schemas, the `openai` SDK called directly (not via `services/llm/`/LiteLLM), mounted at `/embeddings` without `/api/v1` | `app/embedding_pipeline/` | Move into `routers/`, `schemas/` and `services/` behind a Protocol once the course stops tracking the reference (keep each move in its own commit) |
 
 ---
 

@@ -214,6 +214,44 @@ Cleaning and PII pseudonymization exist as libraries (`scripts/ingestion/demo_cl
 `demo_pii.py`) but are not yet part of the run. `uv run python -m app.services.ingestion.architecture`
 prints the CAG vs RAG recommendation for the project corpus.
 
+### Embedding pipeline (session 7)
+
+First step towards semantic search: `app/embedding_pipeline/` turns historical budgets (JSON) into vectors.
+Nothing is persisted yet: vectors are built in memory and returned over HTTP (pgvector comes in session 8).
+It follows the course reference layout, so it calls the `openai` SDK directly and is mounted without `/api/v1`.
+
+- `chunker.py` (`JSONStructuralChunker`): structural chunking, one budget component = one chunk, prefixed with
+  a header of the parent budget (project, sector, year, main tech). Tokens counted with `tiktoken`.
+- `embedder.py` (`OpenAIEmbedder`): `text-embedding-3-small` (1536 dims) in batches of 100, exponential retry
+  (1s/2s/4s) on `RateLimitError`, one structlog event per batch, cost at $0.02 per 1M tokens.
+- `router.py`: `chunk → embed → stats`.
+
+| Method | Path | Returns |
+|---|---|---|
+| `POST` | `/embeddings/ingest` | `IngestResponse` `{chunks: [EmbeddedChunk], stats}`; body `{"budgets": [Budget]}`; **422** invalid budget, **500** embeddings API failure or no `OPENAI_API_KEY` (generic message, detail in the logs) |
+
+It shows up in Swagger (`http://127.0.0.1:8000/docs`). `data/budgets_sample.json` is a bare array, so wrap it
+in `budgets` (15 budgets → 52 chunks → ~4.1k tokens → ~$0.00008):
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/embeddings/ingest \
+  -H 'Content-Type: application/json' \
+  -d "{\"budgets\": $(cat data/budgets_sample.json)}" | python -m json.tool | head -40
+```
+
+`scripts/compare.py` embeds two texts and prints their cosine similarity (stdlib only, no numpy). From the repo
+root, with `.env` loaded (real, billed call):
+
+```bash
+uv run python scripts/compare.py \
+  --text-a "OAuth 2.0 authentication backend for fintech" \
+  --text-b "JWT-based authorization service for banking app"
+```
+
+The API runs on the host here (`docker-compose.yml` only holds Redis and Postgres), so there is no container to
+`docker compose exec` into. Results of the three validation pairs:
+[`app/embedding_pipeline/SANITY_CHECK.md`](app/embedding_pipeline/SANITY_CHECK.md).
+
 ## Tests
 
 ```bash
@@ -258,13 +296,13 @@ uv run python -m evals.stress.run --help
 ## Project structure
 
 ```
-app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails, ingestion), persistence (Postgres), prompts
+app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails, ingestion), persistence (Postgres), prompts, embedding_pipeline/
 alembic/        # database migrations
-data/           # ingestion catalog and seed files
+data/           # ingestion catalog, seed files and budgets_sample.json (embedding pipeline)
 web/src/        # React UI: api client, components, hooks
 tests/          # pytest
 evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool); stress/ harness
-scripts/        # dev runner, CI scripts, ingestion/ demos and preflight
+scripts/        # dev runner, CI scripts, ingestion/ demos and preflight, compare.py (cosine similarity)
 docs/           # architecture diagrams, screenshots, sample descriptions
 ```
 
