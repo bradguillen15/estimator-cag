@@ -27,7 +27,7 @@ Postgres) that session 7 RAG builds on. estimator-cag has none of it.
   env reads only in `config.py`; collaborators injected via `dependencies.py`; no import-time engine.
 - Tests never reach a real LLM, Postgres or spaCy model (fakes / stubs only).
 - `.env.example` is not readable/writable by the agent: new settings are listed for the user.
-- Commits only with explicit user OK (memory rule); Conventional Commits, no AI attribution,
+- Commits: user authorized (2026-10-18) one commit per task on completion without asking; Conventional Commits, no AI attribution,
   Node 24 first in PATH (`~/.nvm/versions/node/v24.21.0/bin`) for the Husky hook. Never `--no-verify`.
 
 ## Workflow settings
@@ -46,8 +46,14 @@ Postgres) that session 7 RAG builds on. estimator-cag has none of it.
   `turn_index` = uncapped `Session.turn_count`; `cache_hit_kind` always "none". `observation` on both
   session routes; `SessionDetail` adds `summary`, `anchors`, `last_observation`; types.ts mirrored.
   Checks: `uv run pytest -q` all pass; `pnpm lint` clean; `tsc -b --noEmit` clean; `pnpm test:web`
-  117 passed. Commit: pending user OK.
-- [ ] T2 — Stress harness, no run. Route: delegated writer.
+  117 passed.
+  Commit: 9d3b78c.
+- [x] T2 — Stress harness, no run. Route: delegated writer. `evals/stress/` (scenarios 3×20 turns,
+  metrics reusing `MetricResult`, runner `--http` httpx / in-process TestClient with injectable client,
+  non-2xx turns recorded as rows with `status_code`/`error`), deterministic `build_pdfs` (fpdf2 dev
+  dep; 5455/20732/51286/102573 chars), REPORT.md template (100 KB = HTTP 400, not truncation; budget
+  facts only in summary/anchors; caches unused). Checks: 14 new tests, full `uv run pytest -q` green,
+  `--help` of runner and build_pdfs OK. No billed run (user decision).
 - [ ] T3 — Catalog, documents, loader, parsers, seed data. Route: delegated writer.
 - [ ] T4 — Cleaning + PII pseudonymization. Route: delegated writer.
 - [ ] T5 — Postgres persistence (SQLAlchemy, Alembic, compose, settings). Route: delegated writer.
