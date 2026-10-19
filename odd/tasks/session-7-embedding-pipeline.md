@@ -37,12 +37,15 @@ HTTP). Persistence (pgvector) is session 8.
 - [x] T2 Port compare.py + sample data + README/AGENTS docs (inline; `999abb9`)
 - [x] T3 Run sanity pairs (billed, ~$0.000001) and write SANITY_CHECK.md (inline)
 
+- [x] T4 Opt-in API container (Dockerfile, .dockerignore, compose profile `api`) so compare.py runs inside it (inline)
+- [ ] T5 Update the archify overview diagram with the embedding pipeline box
+
 ## Progress
 
 - Branch `session_7` created from up-to-date `main`.
 - Checks: `uv run pytest` green; `/health` ok; `/embeddings/ingest` in OpenAPI; live ingest of the sample
   → 200, 52 chunks, 4126 tokens, $0.00008, 1536-dim vectors; empty budgets → 422.
 - Sanity pairs: A 0.5957, B 0.1920, C 0.5408 (match the reference run).
-- Literal deviations kept (AGENTS.md §7 #12). Pending/user decisions: no API container for
-  `docker compose exec` (README says so); deliverable branch name in the brief is `session-07/pre-exercise`
+- Literal deviations kept (AGENTS.md §7 #12). Pending/user decisions: deliverable branch name in the brief is `session-07/pre-exercise`
   (we use `session_7`); push/PR.
+- T4: image builds; container `/health` ok, `/embeddings/ingest` in OpenAPI, `compare.py` inside → 0.6329.

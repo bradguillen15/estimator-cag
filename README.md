@@ -248,8 +248,18 @@ uv run python scripts/compare.py \
   --text-b "JWT-based authorization service for banking app"
 ```
 
-The API runs on the host here (`docker-compose.yml` only holds Redis and Postgres), so there is no container to
-`docker compose exec` into. Results of the three validation pairs:
+Inside the container: local development runs the API on the host (`pnpm dev`), so the API service is opt-in
+(compose profile `api`; it reads `.env` and mounts `app/`, `data/` and `scripts/`):
+
+```bash
+docker compose --profile api up -d --build estimator
+```
+
+```bash
+docker compose exec estimator python scripts/compare.py --text-a "..." --text-b "..."
+```
+
+Results of the three validation pairs:
 [`app/embedding_pipeline/SANITY_CHECK.md`](app/embedding_pipeline/SANITY_CHECK.md).
 
 ## Tests

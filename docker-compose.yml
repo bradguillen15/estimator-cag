@@ -1,6 +1,7 @@
 # Local development only. `pnpm dev` starts Redis Stack when a cache flag is enabled (RediSearch is
 # needed by the semantic cache; the exact cache works with it too) and always starts Postgres
 # (ingestion jobs + pseudonym mappings; pgvector image so session 7 needs no swap).
+# The `estimator` API container is opt-in (profile "api"): `docker compose --profile api up -d --build estimator`.
 services:
   redis:
     image: redis/redis-stack-server:latest
@@ -29,6 +30,24 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+
+  estimator:
+    profiles: ["api"]
+    build: .
+    env_file: .env
+    environment:
+      # Inside the compose network the backing services are reached by service name, not localhost.
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://estimator:estimator@estimator-postgres:5432/estimator
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+      - ./scripts:/app/scripts
+    depends_on:
+      estimator-postgres:
+        condition: service_healthy
 
 volumes:
   redis-data:
