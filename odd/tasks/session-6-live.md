@@ -54,7 +54,7 @@ Postgres) that session 7 RAG builds on. estimator-cag has none of it.
   dep; 5455/20732/51286/102573 chars), REPORT.md template (100 KB = HTTP 400, not truncation; budget
   facts only in summary/anchors; caches unused). Checks: 14 new tests, full `uv run pytest -q` green,
   `--help` of runner and build_pdfs OK. No billed run (user decision).
-- [ ] T3 — Catalog, documents, loader, parsers, seed data. Route: delegated writer.
+- [x] T3 — Catalog, documents, loader, parsers, seed data. Route: delegated writer. `app/services/ingestion/` (catalog models/loader/inspect, documents.py, loaders.py, parsers json+txt + registry), `data/catalog/catalog.yaml`, `data/seed/`, pyyaml. Checks: full `uv run pytest -q` green; catalog loader CLI → 3 sources, 1 included; inspect CLI lists seeds; no fastapi/sqlalchemy/env reads under ingestion.
 - [ ] T4 — Cleaning + PII pseudonymization. Route: delegated writer.
 - [ ] T5 — Postgres persistence (SQLAlchemy, Alembic, compose, settings). Route: delegated writer.
   `scripts/dev.mjs` (user request): always start `estimator-postgres` (`docker compose up -d --wait`),
