@@ -35,14 +35,14 @@ class ScriptedProvider:
         self.answers = list(answers)
         self.calls: list[tuple[str, str]] = []
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, metrics: object = None) -> str:
         self.calls.append((system_prompt, user_prompt))
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
         return answer
 
-    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+    def complete_messages(self, messages: list[dict[str, str]], metrics: object = None) -> str:
         return self.complete(messages[0]["content"], messages[-1]["content"])
 
     def stream(self, *args: object, **kwargs: object) -> None:

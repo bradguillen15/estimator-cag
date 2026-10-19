@@ -31,11 +31,20 @@ recorded, through the same `_record_session_turn` as a normal turn (verdict kept
 Every path first resolves the audience tier (`services/audience.py`) and carries it on the request: a
 non-default tier adds the trailing `audience.j2` block and enters the exact cache key and the semantic bucket.
 
+Ingestion (separate flow, `app/services/ingestion/`):
+`POST /api/v1/ingestion/runs` (202) → `IngestionService` → catalog check → background `ingest_source`
+(`FileSystemLoader` → `ParserRegistry` → `Document`s); the job is tracked in Postgres and read with
+`GET /api/v1/ingestion/jobs/{id}`. Cleaning (`cleaning/`) and PII pseudonymization (`pii/`) are standalone
+libraries, **not yet wired into the run** (see §7).
+
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
 same window as the history), which the UI uses to rebuild the conversation thread when it switches or resumes
 sessions (active id kept in `localStorage`).
+Every session turn emits one `turn_observed` log event and returns the same measurements as `observation`
+(`TurnObservation`: tokens, cost, latency, memory sizes; also `last_observation` on the session detail), so a
+stress runner needs no log parsing.
 
 Everything in this document exists to keep that flow easy to extend (more providers, more endpoints,
 more context sources) **without rewriting it**.
@@ -61,6 +70,11 @@ cp .env.example .env                       # then fill the keys
 pnpm install                               # install UI deps (whole workspace)
 pnpm dev                                   # run API + UI together (Ctrl+C stops both); also starts Redis (Docker) if a cache flag is enabled
 uv run uvicorn app.main:app --reload       # run API (http://127.0.0.1:8000/docs)
+uv run alembic upgrade head                # migrate Postgres (pnpm dev already does it; Postgres runs in Docker)
+uv run python -m spacy download es_core_news_md   # PII model, not a declared dependency (see §7)
+uv run python scripts/ingestion/demo_cleaning.py  # demos: also demo_pii.py
+pnpm preflight                             # ingestion pre-flight: packages, spaCy model, seed data, catalog, API, Postgres
+uv run python -m evals.stress.run --help   # CAG stress runner: REAL, billed LLM calls (results: evals/stress/REPORT.md)
 pnpm dev:web                               # run UI only (http://localhost:5173, proxies /api → :8000)
 pnpm build                                 # build UI → web/dist, served by FastAPI at /
 pnpm lint                                  # ESLint (build also type-checks with tsc)
@@ -97,13 +111,20 @@ app/
     ├── summarizer.py           # Third LLM call (prompts/summary/<version>/): bounded running summary; failure keeps the previous one
     ├── attachments.py          # PDF/.docx text extraction (pypdf, python-docx), appended to the transcript
     ├── metadata_extractor.py   # Second LLM call per session turn: extracts + merges ProjectMetadata (JSON)
+    ├── ingestion/              # Ingestion pipeline: catalog/ (YAML data catalog) · loaders.py · parsers/ · documents.py · orchestrator.py (IngestionService, ingest_source) · jobs.py (JobsRepository Protocol) · cleaning/ (pandera policy) · pii/ (Presidio + Faker pseudonyms, MappingStore Protocol) · architecture.py (CAG vs RAG helper, CLI)
     ├── guardrails/             # input.py (injection reject, PII redaction, moderation hook) · output.py (answer structure check)
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
 
+app/persistence/         # Postgres (SQLAlchemy models, engine/session builders, repositories); the only code importing sqlalchemy/psycopg
+alembic/                 # DB migrations (`uv run alembic upgrade head`)
+data/                    # catalog/catalog.yaml + seed/ source files for ingestion
+scripts/ingestion/       # demo_cleaning.py, demo_pii.py, preflight.py (CLI tools, may import app.*)
+
 tests/                   # pytest: prompts, schemas, provider (patched litellm.completion), service, routes
 
 evals/                   # Dev tool: golden_dataset.json, dataset.py, metrics.py, run.py (`pnpm evals`). May import app.*; app/ never imports evals
+evals/stress/            # CAG stress-test harness (scenarios, metrics, run.py, REPORT.md); billed LLM calls, never part of pytest/CI
 
 web/src/                 # React UI — talks to the API over HTTP only, never imports Python
 ├── api/                 # client.ts (fetch + SSE parser) and types.ts (mirror of app/schemas)
@@ -139,6 +160,7 @@ patch around it.
 | Provider SDK calls | `services/llm/` | `litellm` is imported only under `app/services/llm/` (completion, moderation, embeddings); a non-LiteLLM backend would get its own file there |
 | Cache backends | `services/cache/` | `redis` / `redisvl` are imported only under `app/services/cache/`; callers see the `ResponseCache` / `SemanticCache` Protocols |
 | Input guardrails | `services/guardrails/input.py` | Run in the `get_safe_request` dependency (see §5.1), never inside a streaming handler |
+| DB access | `app/persistence/` | `sqlalchemy` / `psycopg` imported only there; services see the `JobsRepository` / `MappingStore` Protocols |
 | Env vars & secrets | `config.py` | `os.getenv` anywhere else is a bug |
 
 ---
@@ -392,6 +414,10 @@ Fix these opportunistically when you touch the surrounding code; do not replicat
 | 5 | `estimation` returned as an opaque Markdown blob | `routers/estimations.py` | Consider a structured response (tasks, total hours, weeks) when a consumer needs it — not before |
 | 6 | No Python linter/formatter yet | repo-wide | Add `ruff` when style drift shows up (§8) |
 | 7 | Semantic cache is unverified against a real Redis Stack, and a setup failure is permanent for the process (no retry; restart to recover) | `services/cache/semantic.py` | Run an integration check against `redis/redis-stack` (index creation, bucket filter, TTL) before moving `SEMANTIC_CACHE_LOG_ONLY` to `false` |
+| 8 | Cleaning and PII pseudonymization are not wired into the ingestion run (only load + parse) | `services/ingestion/orchestrator.py` | Call `cleaning/` and `pii/` from `ingest_source` once the output has a consumer |
+| 9 | Reference quirks in the validation policy: `BUDGET-2024-0002` int/float dtype gets quarantined, the strict schema flags the `content_hash` column, and nullable `client_name` makes the quarantine path unreachable | `services/ingestion/cleaning/` | Decide the intended behaviour, fix schema/policy, add regression tests |
+| 10 | Live Postgres migration through `scripts/dev.mjs` is not verified in CI (tests never touch Postgres) | `scripts/dev.mjs`, `alembic/` | Add a CI job with a Postgres service that runs `alembic upgrade head` |
+| 11 | The spaCy model (`es_core_news_md`) is not a declared dependency; it needs a manual download | `pyproject.toml`, `pii/analyzer.py` | Pin the model wheel as a dependency or document it in CI/bootstrap |
 
 ---
 
@@ -428,6 +454,10 @@ Pre-commit (Husky + lint-staged, installed by `pnpm install` via `prepare`) runs
 CI**: both call `scripts/ci/api.sh` and `scripts/ci/web.sh`, against the staged snapshot only. To
 change what is checked, edit those scripts, never the workflow or the hook separately. Don't bypass
 the hook with `--no-verify` to land failing code.
+
+Stress tests (`evals/stress/`, `uv run python -m evals.stress.run`) make real, billed LLM calls like `pnpm evals`
+and are never part of pytest/CI. Tests never touch Postgres or the spaCy model: persistence and PII are faked
+(in-memory repositories, fake analyzers).
 
 Rules:
 

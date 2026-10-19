@@ -24,6 +24,7 @@ import structlog
 
 from app.prompts.loader import PROMPT_VERSION, render_estimation_examples, render_estimation_prompt
 from app.schemas.estimations import EstimationRequest
+from app.schemas.sessions import TurnObservation
 from app.services.audience import AudienceResolution, resolve_audience
 from app.services.review_loop import ReviewLoop, ReviewLoopResult
 from app.services.cache.base import CachedAnswer, NoOpCache, ResponseCache, make_cache_key
@@ -33,7 +34,12 @@ from app.schemas.critic import CriticFeedback, CriticIssue, CriticVerdict
 from app.services.critic import Critic
 from app.services.guardrails.input import InputGuardrails, redact_pii
 from app.services.guardrails.output import check_estimation_output
-from app.services.llm.base import EstimationLLMProvider, GenerationMetrics
+from app.services.llm.base import (
+    EstimationLLMProvider,
+    GenerationMetrics,
+    UsageTotals,
+    complete_messages_tracked,
+)
 from app.services.history_compression import HistoryCompressor
 from app.services.metadata_extractor import MetadataExtractor
 from app.services.sessions import Session, TurnRecord
@@ -58,6 +64,7 @@ class SessionTurn:
     history_description: str
     display_description: str  # the transcript as typed (redacted), without attachment text
     attachment_names: tuple[str, ...] = ()
+    attachments_chars: int = 0  # raw extracted attachment text, before the guardrails
 
 
 class EstimationService:
@@ -121,7 +128,7 @@ class EstimationService:
         Raises ``AttachmentError`` or ``InputRejectedError``. An instruction hidden in an attachment
         is rejected like one in the transcript.
         """
-        description = build_description(request.description, attachments)
+        description, attachments_chars = build_description(request.description, attachments)
         safe_description = self._guardrails.check(description)
         history_description = display_description = safe_description
         names = tuple(display_name(attachment.filename) for attachment in attachments)
@@ -134,6 +141,7 @@ class EstimationService:
             history_description=history_description,
             display_description=display_description,
             attachment_names=names,
+            attachments_chars=attachments_chars,
         )
 
     def generate(
@@ -194,9 +202,12 @@ class EstimationService:
         of the turns that left the window. No caching (see the module docstring). A failed metadata
         extraction or summary keeps the old facts / summary.
         """
+        started_at = perf_counter()
+        usage = UsageTotals()
         request = self._begin_session_turn(turn, session)
-        text = self._provider.complete_messages(self._session_messages(request, session, prompt_version))
-        self._record_session_turn(turn, request, session, text, prompt_version)
+        messages = self._session_messages(request, session, prompt_version)
+        text = complete_messages_tracked(self._provider, messages, usage)
+        self._record_session_turn(turn, request, session, text, prompt_version, usage=usage, started_at=started_at)
         return text
 
     def generate_for_session_with_critic(
@@ -211,14 +222,28 @@ class EstimationService:
         message), plus the ``critic_feedback`` block on retries. The session is not touched until the
         loop ends, so every attempt sees the same history. Caches are bypassed, as for a session turn.
         """
+        started_at = perf_counter()
+        usage = UsageTotals()
         request = self._begin_session_turn(turn, session)
 
         def actor(feedback: CriticFeedback | None) -> str:
             issues = feedback.issues if feedback else None
-            return self._provider.complete_messages(self._session_messages(request, session, prompt_version, issues))
+            messages = self._session_messages(request, session, prompt_version, issues)
+            return complete_messages_tracked(self._provider, messages, usage)
 
-        result = self._review_loop.run(actor, lambda estimate: self._critic.review(request.description, estimate))
-        self._record_session_turn(turn, request, session, result.estimate, prompt_version, result.final_verdict)
+        result = self._review_loop.run(
+            actor, lambda estimate: self._critic.review(request.description, estimate, usage)
+        )
+        self._record_session_turn(
+            turn,
+            request,
+            session,
+            result.estimate,
+            prompt_version,
+            result.final_verdict,
+            usage=usage,
+            started_at=started_at,
+        )
         return result
 
     def _begin_session_turn(self, turn: SessionTurn, session: Session) -> EstimationRequest:
@@ -251,6 +276,9 @@ class EstimationService:
         text: str,
         prompt_version: str,
         final_verdict: CriticVerdict | None = None,
+        *,
+        usage: UsageTotals,
+        started_at: float,
     ) -> None:
         self._passes_output_check(request, text, prompt_version)  # logged only: nothing to cache
         _, history_user = render_estimation_prompt(
@@ -267,10 +295,34 @@ class EstimationService:
                 final_verdict=final_verdict,
             ),
         )
-        self._history_compressor.compress(session.history, evicted, request.language.value)
+        self._history_compressor.compress(session.history, evicted, request.language.value, usage)
         session.metadata = self._metadata_extractor.update(
-            session.metadata, request.description, text, request.language.value
+            session.metadata, request.description, text, request.language.value, usage
         )
+        self._observe_session_turn(turn, request, session, usage, started_at)
+
+    @staticmethod
+    def _observe_session_turn(
+        turn: SessionTurn, request: EstimationRequest, session: Session, usage: UsageTotals, started_at: float
+    ) -> None:
+        """Builds the turn's ``TurnObservation``, keeps it on the session and logs ``turn_observed``."""
+        observation = TurnObservation(
+            turn_index=session.turn_count,
+            session_id=session.session_id,
+            enriched_transcript_chars=len(request.description),
+            attachments_total_chars=turn.attachments_chars,
+            messages_in_window=len(session.history.messages),
+            anchors_count=len(session.history.anchors),
+            summary_chars=len(session.history.summary),
+            tokens_in=usage.input_tokens,
+            tokens_out=usage.output_tokens,
+            cost_usd=round(usage.cost_usd, 6),
+            latency_ms=round((perf_counter() - started_at) * 1000, 1),
+            cache_hit_kind="none",  # session turns bypass both response caches
+            last_resolved_tier=session.last_audience,
+        )
+        session.last_observation = observation
+        logger.info("turn_observed", **observation.model_dump(mode="json"))
 
     def generate_stream(
         self,

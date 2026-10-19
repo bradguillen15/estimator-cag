@@ -21,7 +21,7 @@ from app.exceptions import LLMProviderError
 from app.prompts.loader import render_critic_prompt
 from app.schemas.critic import CriticFeedback
 from app.services.guardrails.input import prompt_injection_pattern
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, UsageTotals, complete_tracked
 
 logger = structlog.get_logger()
 
@@ -32,11 +32,11 @@ class Critic:
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
 
-    def review(self, description: str, estimate: str) -> CriticFeedback:
+    def review(self, description: str, estimate: str, usage: UsageTotals | None = None) -> CriticFeedback:
         """The verdict on ``estimate``; ``accept`` (no issues) when the review itself fails."""
         system, user = render_critic_prompt(description, estimate)
         try:
-            raw = self._provider.complete(system, user)
+            raw = complete_tracked(self._provider, system, user, usage)
             feedback = CriticFeedback.model_validate_json(_FENCE_RE.sub("", raw.strip()))
         except (LLMProviderError, ValidationError, json.JSONDecodeError) as exc:
             logger.warning("critic_failed_fallback_accept", error_type=type(exc).__name__)

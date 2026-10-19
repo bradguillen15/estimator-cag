@@ -16,7 +16,7 @@ from app.exceptions import LLMProviderError
 from app.prompts.loader import render_summary_prompt
 from app.schemas.sessions import TurnPair
 from app.services.guardrails.input import prompt_injection_pattern
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, UsageTotals, complete_tracked
 
 logger = structlog.get_logger()
 
@@ -28,13 +28,17 @@ class ConversationSummarizer:
         self._provider = provider
         self._max_chars = max_chars
 
-    def summarize(self, previous: str, evicted: Sequence[TurnPair], language: str = "es") -> str:
-        """The updated summary, or ``previous`` when there is nothing to fold or the call fails."""
+    def summarize(
+        self, previous: str, evicted: Sequence[TurnPair], language: str = "es", usage: UsageTotals | None = None
+    ) -> str:
+        """The updated summary, or ``previous`` when there is nothing to fold or the call fails.
+
+        ``usage`` (optional) accumulates the tokens and cost of the call."""
         if not evicted:
             return previous
         system, user = render_summary_prompt(previous, evicted, language, self._max_chars)
         try:
-            raw = self._provider.complete(system, user)
+            raw = complete_tracked(self._provider, system, user, usage)
         except LLMProviderError as exc:
             logger.warning("summary_failed", error_type=type(exc).__name__)
             return previous

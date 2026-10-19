@@ -14,6 +14,8 @@ os.environ.update(
         "MODERATION_ENABLED": "false",
         "CACHE_ENABLED": "false",
         "SEMANTIC_CACHE_ENABLED": "false",
+        # Never touch a real database from tests (nothing connects at import time anyway).
+        "DATABASE_URL": "postgresql+psycopg://test:test@localhost:1/test",
     }
 )
 
@@ -70,16 +72,21 @@ class FakeProvider:
         self.calls: list[tuple[str, str]] = []
         self.message_calls: list[list[dict[str, str]]] = []
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, metrics: GenerationMetrics | None = None) -> str:
         self.calls.append((system_prompt, user_prompt))
         if self.error:
             raise self.error
+        if metrics is not None:
+            metrics.model = self.model
+            metrics.input_tokens = 100
+            metrics.output_tokens = 20
+            metrics.cost_usd = 0.01
         return self.text
 
-    def complete_messages(self, messages: list[dict[str, str]]) -> str:
+    def complete_messages(self, messages: list[dict[str, str]], metrics: GenerationMetrics | None = None) -> str:
         """Also recorded in ``calls`` as ``(system, last user message)``."""
         self.message_calls.append(messages)
-        return self.complete(messages[0]["content"], messages[-1]["content"])
+        return self.complete(messages[0]["content"], messages[-1]["content"], metrics)
 
     def stream(
         self,

@@ -53,7 +53,7 @@ def test_route_contract_and_trail(reviewed_client: TestClient, store: SessionSto
     body = response.json()
     assert set(body) == {
         "text", "prompt_version", "cache_hit", "audience", "audience_rule",
-        "project_metadata", "history_turns", "final_verdict", "iterations",
+        "project_metadata", "history_turns", "observation", "final_verdict", "iterations",
     }  # fmt: skip
     assert body["final_verdict"] == "accept"
     assert body["history_turns"] == 1

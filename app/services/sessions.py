@@ -25,7 +25,7 @@ from typing import Literal
 from app.schemas.critic import CriticVerdict
 from app.exceptions import SessionNotFoundError
 from app.schemas.estimations import Audience
-from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnPair
+from app.schemas.sessions import HistoryMemory, ProjectMetadata, TurnObservation, TurnPair
 
 Role = Literal["user", "assistant"]
 DEFAULT_MAX_TURNS = 6  # SESSION_MAX_TURNS overrides it
@@ -127,6 +127,8 @@ class Session:
     turns: list[TurnRecord] = field(default_factory=list)
     last_audience: Audience | None = None  # tier + rule of the latest turn
     last_audience_rule: str | None = None
+    turn_count: int = 0  # turns recorded so far; unlike ``turns`` it is not capped by the window
+    last_observation: TurnObservation | None = None
 
     def record_turn(
         self, user_content: str, assistant_content: str, display: TurnRecord | None = None
@@ -136,6 +138,7 @@ class Session:
         ``display`` is kept in step with the history: same window, oldest dropped first.
         """
         evicted = self.history.add_turn(user_content, assistant_content)
+        self.turn_count += 1
         if display is not None:
             self.turns.append(display)
             del self.turns[: -self.history.max_turns]

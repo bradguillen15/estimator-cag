@@ -34,3 +34,34 @@ class InputRejectedError(EstimationError):
     def __init__(self, message: str, *, reason: str) -> None:
         super().__init__(message)
         self.reason = reason
+
+
+class IngestionSourceNotFoundError(EstimationError):
+    """The requested ingestion source is not declared in the data catalog."""
+
+    def __init__(self, source_name: str) -> None:
+        super().__init__(f"Source {source_name!r} not found in catalog")
+        self.source_name = source_name
+        self.reason = "unknown_source"
+
+
+class IngestionSourceNotIncludedError(EstimationError):
+    """The source exists but its catalog decision is not ``include`` (review / exclude)."""
+
+    def __init__(self, source_name: str, *, decision: str, decision_reason: str | None) -> None:
+        super().__init__(
+            f"Source {source_name!r} has decision={decision!r}; only 'include' sources can be ingested"
+        )
+        self.source_name = source_name
+        self.decision = decision
+        self.decision_reason = decision_reason
+        self.reason = "source_not_included"
+
+
+class IngestionJobNotFoundError(EstimationError):
+    """The ``job_id`` is unknown."""
+
+    def __init__(self, job_id: object) -> None:
+        super().__init__(f"Ingestion job {job_id} not found")
+        self.job_id = job_id
+        self.reason = "unknown_job"

@@ -16,6 +16,7 @@ from app.schemas.estimations import EstimationRequest
 from app.services.review_loop import ReviewLoop
 from app.services.critic import Critic
 from app.services.estimation_service import EstimationService
+from app.services.llm.base import GenerationMetrics
 from app.services.llm.factory import get_critic_provider
 from tests.conftest import VALID_REQUEST, FakeProvider
 
@@ -216,11 +217,11 @@ class _RoutedProvider(FakeProvider):
         super().__init__(**kwargs)
         self._critic_replies = iter(critic_replies)
 
-    def complete(self, system_prompt: str, user_prompt: str) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, metrics: GenerationMetrics | None = None) -> str:
         if "independent auditor" in system_prompt:
             self.calls.append((system_prompt, user_prompt))
             return next(self._critic_replies)
-        return super().complete(system_prompt, user_prompt)
+        return super().complete(system_prompt, user_prompt, metrics)
 
 
 @pytest.fixture
