@@ -19,6 +19,7 @@
     "test": "pnpm run test:api && pnpm run test:web",
     "test:api": "uv run pytest",
     "evals": "uv run python -m evals.run",
+    "preflight": "uv run python scripts/ingestion/preflight.py",
     "test:web": "pnpm --filter estimator-web test",
     "test:watch": "pnpm --filter estimator-web test:watch",
     "test:coverage": "uv run pytest --cov=app --cov-report=term-missing && pnpm --filter estimator-web test:coverage"

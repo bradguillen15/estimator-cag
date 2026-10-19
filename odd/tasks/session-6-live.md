@@ -61,7 +61,7 @@ Postgres) that session 7 RAG builds on. estimator-cag has none of it.
   then `uv run alembic upgrade head` before the API; on Ctrl+C/exit `docker compose stop` it only if
   started here (same pattern as Redis; data kept in the volume). Docker missing → warn, keep going.
 - [x] T6 — Ingestion API + DI + lifespan catalog log. Route: delegated writer. `IngestionService` (single include check) + `ingest_source`; per-operation `jobs_scope` so background runs open their own DB session; domain errors → 404 `unknown_source`/`unknown_job`, 400 `source_not_included` (object detail); lifespan logs `catalog_loaded`/`catalog_load_failed` (non-fatal); `build_pseudonymizer()` provider (unused by endpoints). Checks: 534 passed; OpenAPI lists `/api/v1/ingestion/runs` and `/jobs/{job_id}`; importing app does not connect to Postgres.
-- [ ] T7 — Architecture helper, preflight, docs (AGENTS.md, README). Route: delegated writer.
+- [x] T7 — Architecture helper, preflight, docs (AGENTS.md, README). Route: delegated writer. `architecture.py` (English, CLI recommends RAG for PROYECTO_2), `scripts/ingestion/preflight.py` + `pnpm preflight`, AGENTS.md §1/§2/§3/§7 (#8–#11)/§8, README setup/env/endpoints/stress. Checks: 539 passed; preflight exits 1 without traceback (spaCy model, API, Postgres not available here).
 
 ## Progress
 

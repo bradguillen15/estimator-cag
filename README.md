@@ -21,7 +21,7 @@ Markdown estimate (assumptions, task breakdown, total hours, team and duration).
 - Python 3.13 with [uv](https://docs.astral.sh/uv/)
 - **Node 24 LTS** (`nvm use`) and **pnpm 10** (`corepack enable pnpm`). `npm install` is blocked on purpose.
 - An Anthropic and/or OpenAI API key
-- Docker, only if you enable a cache
+- Docker: runs Postgres for ingestion (and Redis if you enable a cache)
 
 ## Setup
 
@@ -30,6 +30,8 @@ nvm use                # Node 24 from .nvmrc
 uv sync                # Python dependencies
 pnpm install           # JS dependencies + the pre-commit hook
 cp .env.example .env   # then set your API keys (APP_ENV and LOG_LEVEL are required)
+uv run python -m spacy download es_core_news_md   # Spanish model for PII detection (ingestion)
+pnpm preflight         # optional: checks packages, spaCy model, seed data, catalog, API and Postgres
 ```
 
 ## Run
@@ -39,7 +41,8 @@ pnpm dev
 ```
 
 Starts the API (http://127.0.0.1:8000, docs at `/docs`) and the UI (**http://localhost:5173**).
-`Ctrl+C` stops both. If a cache is enabled in `.env`, it also starts Redis through Docker.
+`Ctrl+C` stops both. It also starts Postgres through Docker, runs `alembic upgrade head`, and stops it
+on exit if it started it. If a cache is enabled in `.env`, it starts Redis too.
 To run them separately: `pnpm dev:api` and `pnpm dev:web`.
 
 Production-like, single process:
@@ -64,6 +67,17 @@ Everything is set in `.env`; [`.env.example`](.env.example) lists every option w
 
 - **Logging:** `APP_ENV=development` prints readable console logs; `production` prints one JSON
   line per event. Each LLM call logs latency, tokens and estimated cost.
+
+- **Ingestion** (all optional, defaults shown):
+
+  | Variable | Default |
+  |---|---|
+  | `DATABASE_URL` | `postgresql+psycopg://estimator:estimator@localhost:5433/estimator` |
+  | `CATALOG_PATH` | `data/catalog/catalog.yaml` |
+  | `INGESTION_DATA_ROOT` | `data/seed` |
+  | `PRESIDIO_SPACY_MODEL` | `es_core_news_md` |
+  | `PSEUDONYM_FAKER_LOCALE` | `es_ES` |
+  | `PSEUDONYM_HASH_SALT` | `change-me-in-prod` (override outside development) |
 
 Caches are off by default and fail open: if Redis is down, requests still work, uncached.
 
@@ -189,6 +203,17 @@ is one extra call per turn. Safeguards:
 - Session turns skip the response caches: the cache key does not cover the metadata, so a hit
   could replay an answer built on other facts.
 
+### Ingestion
+
+| Method | Path | Returns |
+|---|---|---|
+| `POST` | `/api/v1/ingestion/runs` | **202** `{job_id, source_name, status}`; body `{"source_name": "<catalog source>"}`; the load + parse runs in the background |
+| `GET` | `/api/v1/ingestion/jobs/{job_id}` | `IngestionJobView` (status and counters of the job, stored in Postgres); **404** if unknown |
+
+Cleaning and PII pseudonymization exist as libraries (`scripts/ingestion/demo_cleaning.py`,
+`demo_pii.py`) but are not yet part of the run. `uv run python -m app.services.ingestion.architecture`
+prints the CAG vs RAG recommendation for the project corpus.
+
 ## Tests
 
 ```bash
@@ -198,7 +223,7 @@ pnpm test:web        # UI only
 pnpm lint            # ESLint
 ```
 
-Tests never call a real LLM or Redis. The pre-commit hook runs the same checks as CI.
+Tests never call a real LLM, Redis, Postgres or the spaCy model. The pre-commit hook runs the same checks as CI.
 `tests/integration/` drives whole session flows over HTTP with `httpx.AsyncClient`; its fake
 LLM answers from the prompt it receives, so they prove that context reaches the model and flows
 across turns, not how well a real model uses it.
@@ -219,14 +244,27 @@ uv run python -m evals.run --case mobile-delivery-detailed-en --threshold 0.8 --
 The response caches are never used, so each run reaches the model. The command exits non-zero when
 the aggregate score is below `--threshold` (default 0.8). `pytest` never runs evals.
 
+## Stress tests
+
+`evals/stress/` holds the CAG stress-test harness (scenarios, metrics and a runner). Results and
+conclusions are in [evals/stress/REPORT.md](evals/stress/REPORT.md).
+
+```bash
+uv run python -m evals.stress.run --help
+```
+
+**Cost warning:** it makes real, billed LLM calls; it is never part of pytest or CI.
+
 ## Project structure
 
 ```
-app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails), prompts
+app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails, ingestion), persistence (Postgres), prompts
+alembic/        # database migrations
+data/           # ingestion catalog and seed files
 web/src/        # React UI: api client, components, hooks
 tests/          # pytest
-evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool)
-scripts/        # dev runner and CI scripts
+evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool); stress/ harness
+scripts/        # dev runner, CI scripts, ingestion/ demos and preflight
 docs/           # architecture diagrams, screenshots, sample descriptions
 ```
 
