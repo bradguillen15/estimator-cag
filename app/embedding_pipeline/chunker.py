@@ -12,14 +12,21 @@ of which client and sector it belongs to.
 
 from __future__ import annotations
 
+from functools import cache
+
 import tiktoken
 
 from app.embedding_pipeline.schemas import Budget, BudgetComponent, Chunk
 
-# The embedding model whose tokenizer we count against. Loading an encoding is
-# relatively expensive, so resolve it once at import time and reuse it.
+# The embedding model whose tokenizer we count against.
 EMBEDDING_MODEL = "text-embedding-3-small"
-_ENCODING = tiktoken.encoding_for_model(EMBEDDING_MODEL)
+
+
+@cache
+def _encoding() -> tiktoken.Encoding:
+    """Resolve the tokenizer once, on first use: loading it may download the BPE file, which must not
+    happen while importing app.main (an offline container would fail to boot)."""
+    return tiktoken.encoding_for_model(EMBEDDING_MODEL)
 
 
 class JSONStructuralChunker:
@@ -46,7 +53,8 @@ class JSONStructuralChunker:
                 "complexity": component.complexity,
                 "estimated_hours": component.estimated_hours,
             },
-            token_count=len(_ENCODING.encode(text)),
+            # disallowed_special=(): a field containing e.g. '<|endoftext|>' is counted as plain text, not rejected.
+            token_count=len(_encoding().encode(text, disallowed_special=())),
         )
 
     @staticmethod

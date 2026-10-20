@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from openai import OpenAI  # noqa: E402
+from openai import OpenAI, OpenAIError  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.embedding_pipeline.embedder import OpenAIEmbedder  # noqa: E402
@@ -52,10 +52,14 @@ def main() -> int:
 
     # Default model (text-embedding-3-small): settings.embedding_model is the LiteLLM-prefixed name
     # used by the semantic cache, not a raw OpenAI model id.
-    embedder = OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key))
+    embedder = OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key, max_retries=0))
 
-    vec_a = embedder.embed_one(args.text_a)
-    vec_b = embedder.embed_one(args.text_b)
+    try:
+        vec_a = embedder.embed_one(args.text_a)
+        vec_b = embedder.embed_one(args.text_b)
+    except (OpenAIError, ValueError) as exc:
+        print(f"ERROR: embedding request failed ({type(exc).__name__}): {exc}", file=sys.stderr)
+        return 1
     similarity = cosine_similarity(vec_a, vec_b)
 
     print(f"Text A: {args.text_a}")

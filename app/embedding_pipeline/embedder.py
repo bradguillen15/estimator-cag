@@ -70,20 +70,26 @@ class OpenAIEmbedder:
                 model=self._model,
             )
 
-            for chunk, vector in zip(batch, vectors):
+            for chunk, vector in zip(batch, vectors, strict=True):
                 embedded.append(EmbeddedChunk(**chunk.model_dump(), embedding=vector))
         return embedded
 
     def _create(self, texts: list[str]) -> list[list[float]]:
         """Call the embeddings API with a simple exponential-backoff retry on
-        rate limits. All other errors propagate to the caller."""
+        rate limits. All other errors propagate to the caller.
+
+        Vectors are ordered by the response ``index`` and their count is checked, so a reordered or short
+        response can never attach a vector to the wrong chunk or drop chunks silently."""
         last_error: RateLimitError | None = None
         for wait in (0, *_RETRY_BACKOFF_SECONDS):
             if wait:
                 time.sleep(wait)
             try:
                 response = self._client.embeddings.create(model=self._model, input=texts)
-                return [item.embedding for item in response.data]
+                items = sorted(response.data, key=lambda item: item.index)
+                if len(items) != len(texts):
+                    raise ValueError(f"Embeddings API returned {len(items)} vectors for {len(texts)} inputs.")
+                return [item.embedding for item in items]
             except RateLimitError as exc:
                 last_error = exc
                 log.warning("embedding_rate_limited", retry_in_s=wait or _RETRY_BACKOFF_SECONDS[0])

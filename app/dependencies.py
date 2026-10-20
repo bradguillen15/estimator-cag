@@ -55,7 +55,8 @@ def get_openai_embedder() -> OpenAIEmbedder | None:
     if not settings.openai_api_key:
         logger.warning("embedder_disabled", reason="no_openai_key")
         return None
-    return OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key))
+    # max_retries=0: OpenAIEmbedder owns the rate-limit retries; the SDK's own 2 would multiply them.
+    return OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key, max_retries=0))
 
 def _get_semantic_cache() -> SemanticCache:
     if not settings.semantic_cache_enabled:
