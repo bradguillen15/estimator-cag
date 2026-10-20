@@ -7,10 +7,13 @@ from typing import Annotated
 
 import structlog
 from fastapi import Depends, File, Form, Query, UploadFile
+from openai import OpenAI
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
+from app.embedding_pipeline.chunker import JSONStructuralChunker
+from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.exceptions import UnknownPromptVersionError
 from app.persistence.database import build_engine, build_session_factory
 from app.persistence.repositories.jobs import sql_jobs_scope
@@ -37,6 +40,23 @@ from app.services.summarizer import ConversationSummarizer
 
 logger = structlog.get_logger()
 
+
+@lru_cache
+def get_chunker() -> JSONStructuralChunker:
+    """Stateless structural chunker for the embedding pipeline (Session 7)."""
+    return JSONStructuralChunker()
+
+
+@lru_cache
+def get_openai_embedder() -> OpenAIEmbedder | None:
+    """OpenAI embedder for the embedding pipeline. ``None`` when no API key is
+    configured; the router maps that to a 500. (Named apart from ``get_embedder``,
+    the LiteLLM embedder of the semantic cache.)"""
+    if not settings.openai_api_key:
+        logger.warning("embedder_disabled", reason="no_openai_key")
+        return None
+    # max_retries=0: OpenAIEmbedder owns the rate-limit retries; the SDK's own 2 would multiply them.
+    return OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key, max_retries=0))
 
 def _get_semantic_cache() -> SemanticCache:
     if not settings.semantic_cache_enabled:

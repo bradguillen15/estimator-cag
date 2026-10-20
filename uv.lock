@@ -647,6 +647,7 @@ dependencies = [
     { name = "spacy" },
     { name = "sqlalchemy" },
     { name = "structlog" },
+    { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -682,6 +683,7 @@ requires-dist = [
     { name = "spacy", specifier = ">=3.8.16" },
     { name = "sqlalchemy", specifier = ">=2.1.5" },
     { name = "structlog", specifier = ">=26.1.0" },
+    { name = "tiktoken", specifier = ">=0.7.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
 ]
 

@@ -1,0 +1,15 @@
+.env
+.venv
+.git
+node_modules
+web
+evals
+tests
+docs
+odd
+.atl
+.claude
+**/__pycache__
+.coverage
+htmlcov
+coverage

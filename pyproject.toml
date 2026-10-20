@@ -28,6 +28,7 @@ dependencies = [
     "spacy>=3.8.16",
     "sqlalchemy>=2.1.5",
     "structlog>=26.1.0",
+    "tiktoken>=0.7.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
