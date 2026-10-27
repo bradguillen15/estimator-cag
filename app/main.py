@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.dependencies import get_catalog
+from app.embedding_pipeline.router import router as embeddings_router
 from app.exceptions import (
     AttachmentError,
     InputRejectedError,
@@ -79,6 +80,7 @@ app.add_middleware(RequestContextMiddleware)
 app.include_router(estimations.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(ingestion.router)
+app.include_router(embeddings_router)
 
 
 # Domain error → HTTP status. Messages are client-safe; provider details stay in the logs.
