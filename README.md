@@ -231,7 +231,7 @@ It follows the course reference layout, so it calls the `openai` SDK directly an
 | `POST` | `/embeddings/ingest` | `IngestResponse` `{chunks: [EmbeddedChunk], stats}`; body `{"budgets": [Budget]}`; **422** invalid budget, **500** embeddings API failure or no `OPENAI_API_KEY` (generic message, detail in the logs) |
 
 It shows up in Swagger (`http://127.0.0.1:8000/docs`). `data/budgets_sample.json` is a bare array, so wrap it
-in `budgets` (15 budgets → 52 chunks → ~4.1k tokens → ~$0.00008):
+in `budgets` (17 budgets → 60 chunks):
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/embeddings/ingest \
