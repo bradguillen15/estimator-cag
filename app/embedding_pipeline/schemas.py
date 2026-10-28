@@ -1,8 +1,8 @@
 """Pydantic models for the embedding pipeline.
 
 Input side mirrors the normalized historical-budget JSON (a budget with a list
-of components). Output side carries chunks ready to embed and, once embedded,
-the vectors plus aggregate stats.
+of components). Chunks carry the embeddable text and, once embedded, the vector;
+the HTTP responses carry identifiers and metrics, never vectors (session 8).
 """
 
 from __future__ import annotations
@@ -76,22 +76,23 @@ class EmbeddedChunk(Chunk):
 
 
 class IngestRequest(BaseModel):
-    """Payload for ``POST /embeddings/ingest``."""
+    """Payload for ``POST /embeddings/ingest``: one request = one document.
 
-    budgets: list[Budget] = Field(min_length=1, description="Budgets to chunk and embed.")
+    ``content`` is validated as a :class:`Budget`, so a malformed budget is a 422 before the database or the
+    embeddings API are touched.
+    """
 
-
-class IngestStats(BaseModel):
-    """Aggregate counters returned with an ingest response."""
-
-    total_budgets: int = Field(ge=0)
-    total_chunks: int = Field(ge=0)
-    total_tokens: int = Field(ge=0)
-    estimated_cost_usd: float = Field(ge=0.0)
+    source_path: str = Field(min_length=1, description="Provenance of the document; unique per ingest.")
+    document_type: str = Field(
+        min_length=1, max_length=50, description="Document family, e.g. 'historical_budget'."
+    )
+    content: Budget = Field(description="Full budget JSON, as produced upstream.")
 
 
 class IngestResponse(BaseModel):
-    """Response for ``POST /embeddings/ingest``."""
+    """Response for ``POST /embeddings/ingest``: identifiers and metrics. Vectors stay in pgvector."""
 
-    chunks: list[EmbeddedChunk]
-    stats: IngestStats
+    document_id: int = Field(description="Primary key of the persisted document.")
+    chunks_created: int = Field(ge=0, description="Chunks persisted for this document.")
+    embedding_dimension: int = Field(ge=0, description="Dimensionality of the stored vectors.")
+    ingestion_time_ms: int = Field(ge=0, description="Wall-clock ingest time.")
