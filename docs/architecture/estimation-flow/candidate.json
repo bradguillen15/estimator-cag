@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "2d8d2fcb2b6d4b9ba5a27db1e10f5ff6c599defd"
+      "revision": "a7a67bfa62cdabba11095e1488055c0c57196a52"
     }
   },
   "components": [
@@ -62,8 +62,8 @@
         },
         {
           "path": "app/main.py",
-          "line": 52,
-          "end_line": 54
+          "line": 81,
+          "end_line": 82
         }
       ]
     },
@@ -110,8 +110,8 @@
         },
         {
           "path": "app/main.py",
-          "line": 57,
-          "end_line": 85
+          "line": 50,
+          "end_line": 145
         }
       ]
     },
@@ -132,8 +132,8 @@
       "sources": [
         {
           "path": "app/dependencies.py",
-          "line": 105,
-          "end_line": 154
+          "line": 170,
+          "end_line": 223
         },
         {
           "path": "app/services/guardrails/input.py",
@@ -287,8 +287,8 @@
         },
         {
           "path": "app/dependencies.py",
-          "line": 74,
-          "end_line": 77
+          "line": 139,
+          "end_line": 142
         }
       ]
     },
@@ -388,8 +388,8 @@
         },
         {
           "path": "app/embedding_pipeline/embedder.py",
-          "line": 85,
-          "end_line": 85
+          "line": 88,
+          "end_line": 88
         }
       ]
     },
@@ -477,8 +477,8 @@
     {
       "id": "embedcaller",
       "type": "external",
-      "label": "Budget JSON caller",
-      "sublabel": "Swagger / curl",
+      "label": "Corpus / query caller",
+      "sublabel": "query_examples.py, Swagger",
       "pos": [
         1280,
         590
@@ -489,9 +489,9 @@
       ],
       "sources": [
         {
-          "path": "app/embedding_pipeline/schemas.py",
-          "line": 78,
-          "end_line": 82
+          "path": "scripts/query_examples.py",
+          "line": 71,
+          "end_line": 115
         }
       ]
     },
@@ -500,7 +500,7 @@
       "type": "backend",
       "label": "Embedding pipeline",
       "sublabel": "POST /embeddings/ingest",
-      "tag": "1 component = 1 chunk",
+      "tag": "one transaction, 409 on duplicate",
       "pos": [
         1550,
         590
@@ -512,18 +512,77 @@
       "sources": [
         {
           "path": "app/embedding_pipeline/router.py",
-          "line": 19,
-          "end_line": 60
+          "line": 22,
+          "end_line": 57
+        },
+        {
+          "path": "app/embedding_pipeline/ingest_service.py",
+          "line": 30,
+          "end_line": 77
         },
         {
           "path": "app/embedding_pipeline/chunker.py",
-          "line": 25,
-          "end_line": 65
+          "line": 32,
+          "end_line": 73
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "type": "backend",
+      "label": "Semantic search",
+      "sublabel": "POST /search",
+      "tag": "same model embeds the query",
+      "pos": [
+        1280,
+        780
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/search_router.py",
+          "line": 21,
+          "end_line": 36
         },
         {
-          "path": "app/embedding_pipeline/embedder.py",
-          "line": 41,
-          "end_line": 91
+          "path": "app/embedding_pipeline/retriever.py",
+          "line": 22,
+          "end_line": 34
+        }
+      ]
+    },
+    {
+      "id": "vectordb",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "sublabel": "documents 1-N chunks",
+      "tag": "vector(1536), no vector index",
+      "pos": [
+        1550,
+        780
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/persistence/repositories/chunks.py",
+          "line": 50,
+          "end_line": 93
+        },
+        {
+          "path": "app/persistence/models.py",
+          "line": 61,
+          "end_line": 113
+        },
+        {
+          "path": "alembic/versions/0002_session8_pgvector.py",
+          "line": 28,
+          "end_line": 80
         }
       ]
     }
@@ -677,7 +736,7 @@
       "id": "embedcaller-to-embeddings",
       "from": "embedcaller",
       "to": "embeddings",
-      "label": "budgets JSON"
+      "label": "one budget per request"
     },
     {
       "id": "embeddings-to-openai",
@@ -686,6 +745,29 @@
       "label": "batches of 100",
       "fromSide": "top",
       "toSide": "bottom"
+    },
+    {
+      "id": "embedcaller-to-search",
+      "from": "embedcaller",
+      "to": "search",
+      "label": "query, k",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "embeddings-to-vectordb",
+      "from": "embeddings",
+      "to": "vectordb",
+      "label": "document + chunks, 1 commit",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "variant": "emphasis"
+    },
+    {
+      "id": "search-to-vectordb",
+      "from": "search",
+      "to": "vectordb",
+      "label": "cosine k-NN (<=>)"
     }
   ],
   "cards": [
@@ -744,10 +826,12 @@
     },
     {
       "dot": "slate",
-      "title": "Embedding pipeline (session 7)",
+      "title": "Embedding pipeline + search (sessions 7-8)",
       "items": [
-        "Each budget component becomes one chunk with its parent budget as a header; vectors (text-embedding-3-small, 1536 dims) are returned, not stored",
-        "Follows the course reference layout: openai SDK called directly, mounted without /api/v1; compare.py reuses the same embedder"
+        "Ingest: one budget per request; each component becomes one chunk with its parent budget as a header, embedded in batches (text-embedding-3-small, 1536 dims)",
+        "The document row and all its chunks commit in one async transaction (asyncpg): an embedder failure leaves no orphan document; a known source_path answers 409",
+        "Search embeds the query with the same model and ranks chunks by cosine distance; no vector index yet (sequential-scan baseline)",
+        "Course reference layout: openai SDK called directly, mounted without /api/v1"
       ]
     }
   ]
