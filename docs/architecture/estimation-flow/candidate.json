@@ -9,7 +9,7 @@
     "repository": {
       "url": "git@github.com:bradguillen15/estimator-cag.git",
       "link_mode": "local-only",
-      "revision": "a7a67bfa62cdabba11095e1488055c0c57196a52"
+      "revision": "3ac38517c82f37757e8e2a21a73f3e3ada4192c5"
     }
   },
   "components": [
@@ -500,7 +500,7 @@
       "type": "backend",
       "label": "Embedding pipeline",
       "sublabel": "POST /embeddings/ingest",
-      "tag": "one transaction, 409 on duplicate",
+      "tag": "atomic insert, 409 on duplicate",
       "pos": [
         1550,
         590
@@ -517,8 +517,8 @@
         },
         {
           "path": "app/embedding_pipeline/ingest_service.py",
-          "line": 30,
-          "end_line": 77
+          "line": 24,
+          "end_line": 71
         },
         {
           "path": "app/embedding_pipeline/chunker.py",
@@ -550,7 +550,7 @@
         {
           "path": "app/embedding_pipeline/retriever.py",
           "line": 22,
-          "end_line": 34
+          "end_line": 35
         }
       ]
     },
@@ -559,7 +559,7 @@
       "type": "database",
       "label": "Postgres + pgvector",
       "sublabel": "documents 1-N chunks",
-      "tag": "vector(1536), no vector index",
+      "tag": "unique source_path, no vector index",
       "pos": [
         1550,
         780
@@ -571,8 +571,8 @@
       "sources": [
         {
           "path": "app/persistence/repositories/chunks.py",
-          "line": 50,
-          "end_line": 93
+          "line": 59,
+          "end_line": 102
         },
         {
           "path": "app/persistence/models.py",
@@ -829,7 +829,7 @@
       "title": "Embedding pipeline + search (sessions 7-8)",
       "items": [
         "Ingest: one budget per request; each component becomes one chunk with its parent budget as a header, embedded in batches (text-embedding-3-small, 1536 dims)",
-        "The document row and all its chunks commit in one async transaction (asyncpg): an embedder failure leaves no orphan document; a known source_path answers 409",
+        "The document row and all its chunks commit together, after the embeddings return (no transaction open during the call): an embedder failure leaves no orphan document; a known source_path answers 409, enforced by a unique index",
         "Search embeds the query with the same model and ranks chunks by cosine distance; no vector index yet (sequential-scan baseline)",
         "Course reference layout: openai SDK called directly, mounted without /api/v1"
       ]
