@@ -15,6 +15,7 @@ from app.config import settings
 from app.embedding_pipeline.chunker import JSONStructuralChunker
 from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.embedding_pipeline.ingest_service import EmbeddingIngestService
+from app.embedding_pipeline.retriever import SemanticRetriever
 from app.exceptions import UnknownPromptVersionError
 from app.persistence.database import (
     build_async_engine,
@@ -80,6 +81,15 @@ def get_embedding_ingest_service() -> EmbeddingIngestService | None:
     if embedder is None:
         return None
     return EmbeddingIngestService(chunker=get_chunker(), embedder=embedder, store=get_chunk_store())
+
+
+@lru_cache
+def get_semantic_retriever() -> SemanticRetriever | None:
+    """Query side of the vector store; same ``None`` contract as the ingest service."""
+    embedder = get_openai_embedder()
+    if embedder is None:
+        return None
+    return SemanticRetriever(embedder=embedder, store=get_chunk_store())
 
 def _get_semantic_cache() -> SemanticCache:
     if not settings.semantic_cache_enabled:

@@ -96,3 +96,30 @@ class IngestResponse(BaseModel):
     chunks_created: int = Field(ge=0, description="Chunks persisted for this document.")
     embedding_dimension: int = Field(ge=0, description="Dimensionality of the stored vectors.")
     ingestion_time_ms: int = Field(ge=0, description="Wall-clock ingest time.")
+
+
+class SearchRequest(BaseModel):
+    """Payload for ``POST /search``."""
+
+    query: str = Field(min_length=1, max_length=2000, description="Free-text semantic query.")
+    k: int = Field(default=5, ge=1, le=50, description="Number of nearest chunks to return.")
+
+
+class SearchHit(BaseModel):
+    """One ranked chunk. ``chunk_id`` is the database key; the traceable corpus id travels in ``metadata``."""
+
+    chunk_id: int
+    document_id: int
+    chunk_type: str
+    content: str
+    distance: float = Field(description="Cosine distance (lower = more similar).")
+    metadata: dict
+
+
+class SearchResponse(BaseModel):
+    """Response for ``POST /search``."""
+
+    query: str
+    k: int
+    search_time_ms: int = Field(ge=0)
+    results: list[SearchHit]

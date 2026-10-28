@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.embedding_pipeline.schemas import EmbeddedChunk
+from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
 from app.embedding_pipeline.store import BUDGET_COMPONENT
 from app.persistence.models import ChunkRow, DocumentRow
 
@@ -56,3 +56,38 @@ class PostgresChunkStore:
         """One session, one transaction: commit when the block exits, roll back if it raises."""
         async with self._session_factory() as session, session.begin():
             yield SqlChunkStoreTransaction(session)
+
+    async def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
+        """k-NN by cosine distance (pgvector ``<=>``). No vector index yet, so this is a sequential scan.
+
+        Cosine rather than L2 or inner product: OpenAI embeddings are normalized, so the ranking would match, but
+        cosine is the RAG convention and lines up with the ``vector_cosine_ops`` operator class of a future HNSW
+        index (an operator that does not match the index's operator class makes Postgres silently skip it).
+        """
+        distance = ChunkRow.embedding.cosine_distance(query_vector)
+        stmt = (
+            select(
+                ChunkRow.id,
+                ChunkRow.document_id,
+                ChunkRow.chunk_type,
+                ChunkRow.content,
+                ChunkRow.metadata_,
+                distance.label("distance"),
+            )
+            .where(ChunkRow.embedding.is_not(None))
+            .order_by(distance)
+            .limit(k)
+        )
+        async with self._session_factory() as session:
+            rows = (await session.execute(stmt)).all()
+        return [
+            SearchHit(
+                chunk_id=row.id,
+                document_id=row.document_id,
+                chunk_type=row.chunk_type,
+                content=row.content,
+                distance=float(row.distance),
+                metadata=row.metadata_,
+            )
+            for row in rows
+        ]

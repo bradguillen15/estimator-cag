@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
-from app.embedding_pipeline.schemas import EmbeddedChunk
+from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
 
 # The structural chunker emits one chunk per budget component.
 BUDGET_COMPONENT = "budget_component"
@@ -32,3 +32,7 @@ class ChunkStoreTransaction(Protocol):
 
 class ChunkStore(Protocol):
     def transaction(self) -> AbstractAsyncContextManager[ChunkStoreTransaction]: ...
+
+    async def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
+        """The ``k`` chunks nearest to ``query_vector`` by cosine distance, closest first."""
+        ...
