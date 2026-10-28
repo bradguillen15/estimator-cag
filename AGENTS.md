@@ -37,6 +37,10 @@ Ingestion (separate flow, `app/services/ingestion/`):
 `GET /api/v1/ingestion/jobs/{id}`. Cleaning (`cleaning/`) and PII pseudonymization (`pii/`) are standalone
 libraries, **not yet wired into the run** (see §7).
 
+Embedding pipeline (`app/embedding_pipeline/`, course reference layout, §7 #12): `POST /embeddings/ingest` persists one
+budget as a `documents` row plus its embedded `chunks` (pgvector) in one transaction (409 on a duplicate `source_path`);
+`POST /search` embeds the query and returns the k nearest chunks by cosine distance (no vector index yet, on purpose).
+
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
 count and `turns`: the typed message, attachment names and estimate of each turn, oldest first, capped by the
@@ -116,10 +120,10 @@ app/
     ├── cache/                  # base.py (ResponseCache Protocol, key) · redis_cache.py (exact) · semantic.py (redisvl) · factory.py
     └── llm/                    # base.py (Protocols) · litellm.py / moderation.py / embeddings.py (the only users of the LLM SDK) · factory.py
 
-app/embedding_pipeline/  # Session 7 (course reference layout): schemas · chunker (1 component = 1 chunk, tiktoken) · embedder (openai SDK, batches of 100) · router (POST /embeddings/ingest); see §7 #12
-app/persistence/         # Postgres (SQLAlchemy models, engine/session builders, repositories); the only code importing sqlalchemy/psycopg
+app/embedding_pipeline/  # Sessions 7-8 (course reference layout): schemas · chunker (1 component = 1 chunk, tiktoken) · embedder (openai SDK, batches of 100) · store.py (ChunkStore Protocol) · ingest_service (one transaction) · retriever (cosine k-NN) · router (POST /embeddings/ingest) · search_router (POST /search); see §7 #12
+app/persistence/         # Postgres (SQLAlchemy models incl. pgvector documents/chunks, sync + async engine builders, repositories); the only code importing sqlalchemy/psycopg/asyncpg/pgvector
 alembic/                 # DB migrations (`uv run alembic upgrade head`)
-data/                    # catalog/catalog.yaml + seed/ source files for ingestion
+data/                    # catalog/catalog.yaml + seed/ source files for ingestion; budgets_sample.json (embedding corpus)
 scripts/ingestion/       # demo_cleaning.py, demo_pii.py, preflight.py (CLI tools, may import app.*)
 
 tests/                   # pytest: prompts, schemas, provider (patched litellm.completion), service, routes
@@ -161,7 +165,7 @@ patch around it.
 | Provider SDK calls | `services/llm/` | `litellm` is imported only under `app/services/llm/` (completion, moderation, embeddings); a non-LiteLLM backend would get its own file there |
 | Cache backends | `services/cache/` | `redis` / `redisvl` are imported only under `app/services/cache/`; callers see the `ResponseCache` / `SemanticCache` Protocols |
 | Input guardrails | `services/guardrails/input.py` | Run in the `get_safe_request` dependency (see §5.1), never inside a streaming handler |
-| DB access | `app/persistence/` | `sqlalchemy` / `psycopg` imported only there; services see the `JobsRepository` / `MappingStore` Protocols |
+| DB access | `app/persistence/` | `sqlalchemy` / `psycopg` / `asyncpg` / `pgvector` imported only there; services see the `JobsRepository` / `MappingStore` / `ChunkStore` Protocols. The vector store is async (asyncpg, URL derived from `DATABASE_URL`); Alembic and the session 6 repositories stay sync |
 | Env vars & secrets | `config.py` | `os.getenv` anywhere else is a bug |
 
 ---
@@ -419,7 +423,7 @@ Fix these opportunistically when you touch the surrounding code; do not replicat
 | 9 | Reference quirks in the validation policy: `BUDGET-2024-0002` int/float dtype gets quarantined, the strict schema flags the `content_hash` column, and nullable `client_name` makes the quarantine path unreachable | `services/ingestion/cleaning/` | Decide the intended behaviour, fix schema/policy, add regression tests |
 | 10 | Live Postgres migration through `scripts/dev.mjs` is not verified in CI (tests never touch Postgres) | `scripts/dev.mjs`, `alembic/` | Add a CI job with a Postgres service that runs `alembic upgrade head` |
 | 11 | The spaCy model (`es_core_news_md`) is not a declared dependency; it needs a manual download | `pyproject.toml`, `pii/analyzer.py` | Pin the model wheel as a dependency or document it in CI/bootstrap |
-| 12 | `embedding_pipeline/` follows the course reference layout: its own router and schemas, the `openai` SDK called directly (not via `services/llm/`/LiteLLM), mounted at `/embeddings` without `/api/v1` | `app/embedding_pipeline/` | Move into `routers/`, `schemas/` and `services/` behind a Protocol once the course stops tracking the reference (keep each move in its own commit) |
+| 12 | `embedding_pipeline/` follows the course reference layout: its own router and schemas, the `openai` SDK called directly (not via `services/llm/`/LiteLLM), mounted at `/embeddings` (and `/search`) without `/api/v1` | `app/embedding_pipeline/` | Move into `routers/`, `schemas/` and `services/` behind a Protocol once the course stops tracking the reference (keep each move in its own commit) |
 
 ---
 
