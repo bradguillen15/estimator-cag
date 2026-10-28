@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
-from app.embedding_pipeline.store import BUDGET_COMPONENT
+from app.embedding_pipeline.store import BUDGET_COMPONENT, DuplicateDocumentError
 
 
 @dataclass
@@ -24,15 +24,19 @@ class StoredDocument:
 class FakeChunkStore:
     documents: list[StoredDocument] = field(default_factory=list)
     rollbacks: int = 0
+    open_transactions: int = 0
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[_FakeTransaction]:
         tx = _FakeTransaction(self)
+        self.open_transactions += 1
         try:
             yield tx
         except BaseException:
             self.rollbacks += 1
             raise
+        finally:
+            self.open_transactions -= 1
         self.documents.extend(tx.pending)
 
     async def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
@@ -67,6 +71,10 @@ class _FakeTransaction:
     async def add_document_with_chunks(
         self, *, source_path: str, document_type: str, metadata: dict, chunks: list[EmbeddedChunk]
     ) -> int:
+        # Mirrors the unique index on source_path (independent of the find_document_id fast path).
+        for document in self._store.documents:
+            if document.source_path == source_path:
+                raise DuplicateDocumentError(document.id)
         document = StoredDocument(
             id=len(self._store.documents) + len(self.pending) + 1,
             source_path=source_path,

@@ -23,6 +23,12 @@ def test_metadata_is_stored_in_a_column_named_metadata() -> None:
     assert "metadata" in ChunkRow.__table__.c
 
 
+def test_source_path_is_unique() -> None:
+    (index,) = DocumentRow.__table__.indexes
+    assert index.name == "ix_documents_source_path"
+    assert index.unique
+
+
 def test_relational_indexes_exist_but_no_vector_index() -> None:
     indexes = {index.name: index for index in ChunkRow.__table__.indexes}
     assert set(indexes) == {"ix_chunks_document_id", "ix_chunks_chunk_type", "ix_chunks_metadata_gin"}

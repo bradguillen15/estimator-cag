@@ -65,7 +65,7 @@ class DocumentRow(Base):
     """
 
     __tablename__ = "documents"
-    __table_args__ = (Index("ix_documents_source_path", "source_path"),)
+    __table_args__ = (Index("ix_documents_source_path", "source_path", unique=True),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source_path: Mapped[str] = mapped_column(Text, nullable=False)

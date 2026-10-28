@@ -224,8 +224,10 @@ directly and is mounted without `/api/v1`.
   a header of the parent budget (project, sector, year, main tech). Tokens counted with `tiktoken`.
 - `embedder.py` (`OpenAIEmbedder`): `text-embedding-3-small` (1536 dims) in batches of 100, exponential retry
   (1s/2s/4s) on `RateLimitError`, one structlog event per batch, cost at $0.02 per 1M tokens.
-- `ingest_service.py`: duplicate check → chunk → one batched embeddings call → document + chunks, all in **one**
-  async transaction: if the embedder fails, it rolls back and no orphan `documents` row is left.
+- `ingest_service.py`: duplicate check → chunk → one batched embeddings call → document + chunks committed
+  together in **one** async transaction. No transaction is open during the embeddings call, and the document is only
+  written after it succeeds, so a failing embedder leaves no orphan `documents` row. `source_path` has a unique index:
+  a concurrent identical ingest that slips past the check also gets the 409.
 - `retriever.py` + `search_router.py`: embed the query with the same model, rank chunks by cosine distance in SQL.
 - Storage: `app/persistence/repositories/chunks.py` (`PostgresChunkStore`, asyncpg) behind the `ChunkStore`
   Protocol (`store.py`); tables `documents` and `chunks` from migration `0002_session8_pgvector`.

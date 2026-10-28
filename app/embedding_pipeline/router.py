@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.dependencies import get_embedding_ingest_service
-from app.embedding_pipeline.ingest_service import DuplicateDocumentError, EmbeddingIngestService
+from app.embedding_pipeline.ingest_service import EmbeddingIngestService
 from app.embedding_pipeline.schemas import IngestRequest, IngestResponse
+from app.embedding_pipeline.store import DuplicateDocumentError
 
 log = structlog.get_logger()
 

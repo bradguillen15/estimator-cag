@@ -6,10 +6,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
-from app.embedding_pipeline.store import BUDGET_COMPONENT
+from app.embedding_pipeline.store import BUDGET_COMPONENT, DuplicateDocumentError
 from app.persistence.models import ChunkRow, DocumentRow
 
 
@@ -32,8 +33,16 @@ class SqlChunkStoreTransaction:
         chunks: list[EmbeddedChunk],
     ) -> int:
         document = DocumentRow(source_path=source_path, document_type=document_type, metadata_=metadata)
-        self._session.add(document)
-        await self._session.flush()  # assigns document.id; nothing is committed yet
+        try:
+            # Savepoint: a unique violation rolls back only this insert, so the lookup below still works.
+            async with self._session.begin_nested():
+                self._session.add(document)
+                await self._session.flush()  # assigns document.id; nothing is committed yet
+        except IntegrityError:
+            existing_id = await self.find_document_id(source_path)
+            if existing_id is None:
+                raise
+            raise DuplicateDocumentError(existing_id) from None
         self._session.add_all(
             ChunkRow(
                 document_id=document.id,

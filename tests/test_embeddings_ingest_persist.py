@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.dependencies import get_embedding_ingest_service
@@ -17,14 +18,21 @@ _SAMPLE = Path(__file__).resolve().parent.parent / "data" / "budgets_sample.json
 
 
 class _FakeEmbeddings:
-    """``client.embeddings`` double: counts calls, returns 1536-dim vectors or raises."""
+    """``client.embeddings`` double: counts calls, returns 1536-dim vectors or raises.
 
-    def __init__(self, *, fail: bool = False) -> None:
+    With ``store``, it records how many transactions were open while it ran.
+    """
+
+    def __init__(self, *, fail: bool = False, store: FakeChunkStore | None = None) -> None:
         self.calls = 0
+        self.open_transactions_seen: list[int] = []
         self._fail = fail
+        self._store = store
 
     def create(self, model: str, input: list[str]) -> SimpleNamespace:
         self.calls += 1
+        if self._store is not None:
+            self.open_transactions_seen.append(self._store.open_transactions)
         if self._fail:
             raise RuntimeError("embeddings API down")
         return SimpleNamespace(
@@ -78,14 +86,41 @@ def test_duplicate_source_path_returns_409_with_existing_id_and_skips_embedding(
     assert len(store.documents) == 1
 
 
-def test_embedder_failure_rolls_back_and_leaves_no_document() -> None:
+def test_embedder_failure_leaves_no_document() -> None:
     store = FakeChunkStore()
 
     response = _client(store, _FakeEmbeddings(fail=True)).post("/embeddings/ingest", json=_payload())
 
     assert response.status_code == 500
     assert store.documents == []
-    assert store.rollbacks == 1
+
+
+def test_no_transaction_is_open_during_the_embeddings_call() -> None:
+    store = FakeChunkStore()
+    embeddings = _FakeEmbeddings(store=store)
+
+    response = _client(store, embeddings).post("/embeddings/ingest", json=_payload())
+
+    assert response.status_code == 200
+    assert embeddings.open_transactions_seen == [0]
+
+
+def test_concurrent_duplicate_rejected_by_unique_index_is_409(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: a second ingest that passes the fast-path check (race) still gets 409, not a duplicate."""
+    store, embeddings = FakeChunkStore(), _FakeEmbeddings()
+    client = _client(store, embeddings)
+    first = client.post("/embeddings/ingest", json=_payload()).json()
+
+    async def _check_misses(self: object, source_path: str) -> None:
+        return None
+
+    monkeypatch.setattr("tests.fakes_vector_store._FakeTransaction.find_document_id", _check_misses)
+
+    response = client.post("/embeddings/ingest", json=_payload())
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Document already ingested", "document_id": first["document_id"]}
+    assert len(store.documents) == 1
 
 
 def test_invalid_budget_is_rejected_before_any_work() -> None:

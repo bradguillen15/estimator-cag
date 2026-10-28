@@ -30,5 +30,6 @@ class SemanticRetriever:
         query_vector = await asyncio.to_thread(self._embedder.embed_one, query)
         hits = await self._store.search(query_vector, k)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        log.info("semantic_search_done", query=query[:80], k=k, results=len(hits), search_time_ms=elapsed_ms)
+        # The query text is not logged: users may paste emails or secrets into it.
+        log.info("semantic_search_done", k=k, results=len(hits), search_time_ms=elapsed_ms)
         return SearchResponse(query=query, k=k, search_time_ms=elapsed_ms, results=hits)

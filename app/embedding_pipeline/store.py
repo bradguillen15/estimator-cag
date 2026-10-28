@@ -15,6 +15,14 @@ from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
 BUDGET_COMPONENT = "budget_component"
 
 
+class DuplicateDocumentError(Exception):
+    """A document with the same ``source_path`` is already ingested."""
+
+    def __init__(self, document_id: int) -> None:
+        super().__init__(f"Document already ingested (id={document_id})")
+        self.document_id = document_id
+
+
 class ChunkStoreTransaction(Protocol):
     """Operations that run inside one database transaction (committed on exit, rolled back on error)."""
 
@@ -27,7 +35,10 @@ class ChunkStoreTransaction(Protocol):
         document_type: str,
         metadata: dict,
         chunks: list[EmbeddedChunk],
-    ) -> int: ...
+    ) -> int:
+        """Insert the document and its chunks. Raises :class:`DuplicateDocumentError` when ``source_path`` is
+        already taken (the unique index decides, so concurrent ingests cannot both win)."""
+        ...
 
 
 class ChunkStore(Protocol):

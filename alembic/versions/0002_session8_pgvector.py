@@ -7,8 +7,8 @@ Create Date: 2026-10-27 00:00:00
 Deliberately NO vector index (HNSW / IVFFlat): the sequential scan is the baseline the live session measures
 the index against. The relational indexes (FK, chunk_type, GIN on metadata) are plain hygiene and ship here.
 
-``ix_documents_source_path`` is not unique: the duplicate guard behind the 409 is an application-level check,
-not race-proof under concurrent identical ingests (fine at this scale).
+``ix_documents_source_path`` is unique: the application check behind the 409 is only a fast path, and the index
+is what stops two concurrent identical ingests from both inserting (the violation is also mapped to 409).
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
-    op.create_index("ix_documents_source_path", "documents", ["source_path"])
+    op.create_index("ix_documents_source_path", "documents", ["source_path"], unique=True)
 
     op.create_table(
         "chunks",

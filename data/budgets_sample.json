@@ -651,7 +651,7 @@
     "project_summary": "Bare-bones e-commerce MVP scoped in one-line tickets",
     "main_technology": "node",
     "year": 2024,
-    "total_estimated_hours": 160,
+    "total_estimated_hours": 140,
     "components": [
       {
         "component_id": "MVP-001",
