@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from app.dependencies import get_catalog
 from app.embedding_pipeline.router import router as embeddings_router
+from app.embedding_pipeline.search_router import router as search_router
 from app.exceptions import (
     AttachmentError,
     InputRejectedError,
@@ -81,6 +82,7 @@ app.include_router(estimations.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(ingestion.router)
 app.include_router(embeddings_router)
+app.include_router(search_router)
 
 
 # Domain error → HTTP status. Messages are client-safe; provider details stay in the logs.

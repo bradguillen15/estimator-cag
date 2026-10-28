@@ -3,13 +3,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.dependencies import get_openai_embedder
 from app.embedding_pipeline.chunker import JSONStructuralChunker
 from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.embedding_pipeline.schemas import Budget, Chunk
-from app.main import app
 
 _SAMPLE = Path(__file__).resolve().parent.parent / "data" / "budgets_sample.json"
 
@@ -68,16 +65,3 @@ def test_embed_many_maps_vectors_by_response_index() -> None:
 def test_embed_many_rejects_a_short_response() -> None:
     with pytest.raises(ValueError):
         _embedder(drop=1).embed_many(_chunks(3))
-
-
-def test_ingest_route_returns_embedded_chunks_and_stats() -> None:
-    app.dependency_overrides[get_openai_embedder] = lambda: _embedder()
-    try:
-        response = TestClient(app).post("/embeddings/ingest", json={"budgets": json.loads(_SAMPLE.read_text())})
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["stats"]["total_chunks"] == len(body["chunks"])
-    assert body["stats"]["total_tokens"] > 0

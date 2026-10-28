@@ -1,6 +1,6 @@
 # Local development only. `pnpm dev` starts Redis Stack when a cache flag is enabled (RediSearch is
 # needed by the semantic cache; the exact cache works with it too) and always starts Postgres
-# (ingestion jobs + pseudonym mappings; pgvector image so session 7 needs no swap).
+# (ingestion jobs + pseudonym mappings + the session 8 vector store: pgvector image, `vector` enabled by migration 0002).
 # The `estimator` API container is opt-in (profile "api"): `docker compose --profile api up -d --build estimator`.
 services:
   redis:

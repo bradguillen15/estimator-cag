@@ -214,53 +214,77 @@ Cleaning and PII pseudonymization exist as libraries (`scripts/ingestion/demo_cl
 `demo_pii.py`) but are not yet part of the run. `uv run python -m app.services.ingestion.architecture`
 prints the CAG vs RAG recommendation for the project corpus.
 
-### Embedding pipeline (session 7)
+### Embedding pipeline and semantic search (sessions 7-8)
 
-First step towards semantic search: `app/embedding_pipeline/` turns historical budgets (JSON) into vectors.
-Nothing is persisted yet: vectors are built in memory and returned over HTTP (pgvector comes in session 8).
-It follows the course reference layout, so it calls the `openai` SDK directly and is mounted without `/api/v1`.
+`app/embedding_pipeline/` turns historical budgets (JSON) into vectors, persists them in Postgres + pgvector
+and searches them by cosine distance. It follows the course reference layout, so it calls the `openai` SDK
+directly and is mounted without `/api/v1`.
 
 - `chunker.py` (`JSONStructuralChunker`): structural chunking, one budget component = one chunk, prefixed with
   a header of the parent budget (project, sector, year, main tech). Tokens counted with `tiktoken`.
 - `embedder.py` (`OpenAIEmbedder`): `text-embedding-3-small` (1536 dims) in batches of 100, exponential retry
   (1s/2s/4s) on `RateLimitError`, one structlog event per batch, cost at $0.02 per 1M tokens.
-- `router.py`: `chunk → embed → stats`.
+- `ingest_service.py`: duplicate check → chunk → one batched embeddings call → document + chunks committed
+  together in **one** async transaction. No transaction is open during the embeddings call, and the document is only
+  written after it succeeds, so a failing embedder leaves no orphan `documents` row. `source_path` has a unique index:
+  a concurrent identical ingest that slips past the check also gets the 409.
+- `retriever.py` + `search_router.py`: embed the query with the same model, rank chunks by cosine distance in SQL.
+- Storage: `app/persistence/repositories/chunks.py` (`PostgresChunkStore`, asyncpg) behind the `ChunkStore`
+  Protocol (`store.py`); tables `documents` and `chunks` from migration `0002_session8_pgvector`.
 
 | Method | Path | Returns |
 |---|---|---|
-| `POST` | `/embeddings/ingest` | `IngestResponse` `{chunks: [EmbeddedChunk], stats}`; body `{"budgets": [Budget]}`; **422** invalid budget, **500** embeddings API failure or no `OPENAI_API_KEY` (generic message, detail in the logs) |
+| `POST` | `/embeddings/ingest` | `{document_id, chunks_created, embedding_dimension, ingestion_time_ms}`; body `{"source_path", "document_type", "content": Budget}`; **409** `{"detail": "Document already ingested", "document_id"}` when `source_path` exists, **422** invalid budget, **500** embeddings/DB failure or no `OPENAI_API_KEY` |
+| `POST` | `/search` | `{query, k, search_time_ms, results: [{chunk_id, document_id, chunk_type, content, distance, metadata}]}`; body `{"query", "k": 5}` (`k` 1-50, **422** outside); empty corpus = 200 with no results |
 
-It shows up in Swagger (`http://127.0.0.1:8000/docs`). `data/budgets_sample.json` is a bare array, so wrap it
-in `budgets` (15 budgets → 52 chunks → ~4.1k tokens → ~$0.00008):
-
-```bash
-curl -s -X POST http://127.0.0.1:8000/embeddings/ingest \
-  -H 'Content-Type: application/json' \
-  -d "{\"budgets\": $(cat data/budgets_sample.json)}" | python -m json.tool | head -40
-```
-
-`scripts/compare.py` embeds two texts and prints their cosine similarity (stdlib only, no numpy). From the repo
-root, with `.env` loaded (real, billed call):
-
-```bash
-uv run python scripts/compare.py \
-  --text-a "OAuth 2.0 authentication backend for fintech" \
-  --text-b "JWT-based authorization service for banking app"
-```
-
-Inside the container: local development runs the API on the host (`pnpm dev`), so the API service is opt-in
-(compose profile `api`; it reads `.env` and mounts `app/`, `data/` and `scripts/`):
+`scripts/query_examples.py` ingests the whole sample corpus (idempotent: 409s are skipped; 17 budgets → 60
+chunks) and runs five queries (direct match, reformulation, out of domain, ambiguous, very specific), printing
+the top-5 with `chunk_id`, distance, `chunk_type` and a content preview. Real, billed embedding calls. Its output
+against the sample corpus is in [`output_examples.txt`](output_examples.txt). Inside the container (the API
+service is opt-in, compose profile `api`; it reads `.env` and mounts `app/`, `data/` and `scripts/`):
 
 ```bash
 docker compose --profile api up -d --build estimator
 ```
 
 ```bash
-docker compose exec estimator python scripts/compare.py --text-a "..." --text-b "..."
+docker compose run --rm estimator alembic upgrade head
 ```
 
-Results of the three validation pairs:
-[`app/embedding_pipeline/SANITY_CHECK.md`](app/embedding_pipeline/SANITY_CHECK.md).
+```bash
+docker compose run --rm estimator python scripts/query_examples.py
+```
+
+From the host, with the API running (`pnpm dev`): `uv run python scripts/query_examples.py`.
+
+`scripts/compare.py` (session 7) embeds two texts and prints their cosine similarity; results of its three
+validation pairs: [`app/embedding_pipeline/SANITY_CHECK.md`](app/embedding_pipeline/SANITY_CHECK.md).
+
+```bash
+uv run python scripts/compare.py --text-a "OAuth 2.0 authentication backend for fintech" --text-b "JWT-based authorization service for banking app"
+```
+
+#### Schema decisions (session 8)
+
+- **Two tables, not one.** A budget produces N chunks: a real one-to-many. One table would copy the document's
+  metadata into every chunk row and lose referential integrity. With `documents` → `chunks` and `ON DELETE
+  CASCADE`, deleting a budget deletes its chunks; `documents` owns provenance (`source_path`, `ingested_at`),
+  `chunks` owns the content and the vectors.
+- **`metadata` as JSONB, not columns.** Stable fields (document type, chunk type, dates) are typed columns; what
+  the chunker can enrich (sector, main technology, hours, complexity, traceable `chunk_id`) goes to JSONB. The
+  GIN index lets us query arbitrary keys without a migration per new key; a key is promoted to a typed column
+  only once it becomes a hot filter.
+- **`cosine_distance`, not L2 or inner product.** OpenAI embeddings are normalized, so all three would rank the
+  same; cosine is the RAG convention and, above all, matches the `vector_cosine_ops` operator class of the HNSW
+  index added live. If the query operator and the index's operator class differ, Postgres **silently** ignores
+  the index and falls back to a sequential scan.
+- **No vector index yet, on purpose.** With 17 budgets / 60 chunks the sequential scan answers in a few hundred
+  ms, and it is the baseline the live session measures HNSW against; adding it now would hide what we want to
+  observe. Also out of scope until the live session: metadata filters, hybrid search and Postgres tuning.
+- `embedding` is nullable (insert now, embed later in future async ingestion; here both land atomically) and
+  `vector(1536)` is hardcoded to `text-embedding-3-small` (changing it means re-embedding the whole corpus).
+- Alembic stays sync (psycopg) like session 6 and registers the `vector` type for reflection; the request path
+  uses an asyncpg engine whose URL is derived from the same `DATABASE_URL`, so one variable configures both.
 
 ## Tests
 
@@ -306,13 +330,13 @@ uv run python -m evals.stress.run --help
 ## Project structure
 
 ```
-app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails, ingestion), persistence (Postgres), prompts, embedding_pipeline/
+app/            # FastAPI: routers, schemas, services (LLM, cache, guardrails, ingestion), persistence (Postgres + pgvector), prompts, embedding_pipeline/
 alembic/        # database migrations
 data/           # ingestion catalog, seed files and budgets_sample.json (embedding pipeline)
 web/src/        # React UI: api client, components, hooks
 tests/          # pytest
 evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool); stress/ harness
-scripts/        # dev runner, CI scripts, ingestion/ demos and preflight, compare.py (cosine similarity)
+scripts/        # dev runner, CI scripts, ingestion/ demos and preflight, compare.py (cosine similarity), query_examples.py (semantic search)
 docs/           # architecture diagrams, screenshots, sample descriptions
 ```
 
