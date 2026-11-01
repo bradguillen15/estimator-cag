@@ -203,13 +203,28 @@ jq -n --rawfile q examples/transcripts/02_ambiguous.txt '{query: $q[0:2000], k: 
 > (España/Francia), el email de confirmación y la pregunta "cuánto cuesta". El top-5 apenas cambia: cuatro
 > componentes del mismo presupuesto de e-commerce en ambos casos.
 
-**2d. Contexto: distancias contra todo el corpus** (los 60 chunks, coseno sobre el vector del paso 1):
+**2d. Contexto: el ranking completo con el mismo vector** (`search(vec, 60)`: hasta 60 hits; hoy el corpus tiene
+exactamente 60 chunks, así que aquí son todos, pero con un corpus mayor solo serían los 60 más cercanos):
+
+```bash
+uv run python - <<'EOF'
+import asyncio, pathlib, statistics
+from app.dependencies import get_chunk_store, get_openai_embedder
+
+text = pathlib.Path("examples/transcripts/02_ambiguous.txt").read_text()
+vec = get_openai_embedder().embed_one(text)
+hits = asyncio.run(get_chunk_store().search(vec, 60))
+d = [h.distance for h in hits]
+print(f"hits={len(d)}  min={min(d):.4f}  median={statistics.median(d):.4f}  max={max(d):.4f}")
+print("top-10:", " · ".join(f"{h.metadata['chunk_id'].removeprefix('BUD-2024-')} {h.distance:.4f}" for h in hits[:10]))
+print("all distances:", [round(x, 4) for x in d])
+EOF
+```
 
 ```text
-n=60  min=0.6082  mediana=0.7026  max=0.7751
-top-10: 005::CATALOG-001 0.6082 · 005::CART-002 0.6137 · 005::RECO-003 0.6370 · 005::STORE-004 0.6386
-        008::RET-001 0.6443 · 007::INV-003 0.6519 · 017::MVP-006 0.6562 · 017::MVP-004 0.6570
-        017::MVP-002 0.6578 · 011::STOCK-002 0.6664
+hits=60  min=0.6083  median=0.7027  max=0.7752
+top-10: 005::CATALOG-001 0.6083 · 005::CART-002 0.6138 · 005::RECO-003 0.6372 · 005::STORE-004 0.6388 · 008::RET-001 0.6444 · 007::INV-003 0.6519 · 017::MVP-006 0.6563 · 017::MVP-004 0.6571 · 017::MVP-002 0.6579 · 011::STOCK-002 0.6664
+all distances: [0.6083, 0.6138, 0.6372, 0.6388, 0.6444, 0.6519, 0.6563, 0.6571, 0.6579, 0.6664, 0.6673, 0.6682, 0.6689, 0.6708, 0.6711, 0.6754, 0.6821, 0.6863, 0.6877, 0.6901, 0.6923, 0.6926, 0.693, 0.6931, 0.6953, 0.6978, 0.7, 0.7005, 0.7009, 0.7026, 0.7028, 0.7029, 0.7057, 0.7057, 0.706, 0.7095, 0.7097, 0.7121, 0.7135, 0.7171, 0.7183, 0.7231, 0.7236, 0.7298, 0.7305, 0.7346, 0.7367, 0.7394, 0.7404, 0.7422, 0.7439, 0.7463, 0.7476, 0.7495, 0.7525, 0.7547, 0.7549, 0.7675, 0.7699, 0.7752]
 ```
 
 > **Comentario.** El mejor resultado tiene similitud ≈ 0,39 y todo el corpus cabe en una franja de 0,17 de
@@ -298,6 +313,10 @@ el sistema no lo dice: simplemente no lo devuelve.
   (Francia) y "no me hagas mucho caso". Nada distingue imprescindible de opcional, y eso cambia la estimación.
 - **Ingesta desconectada.** `ingest/` produce `Document`s que nunca llegan a `/embeddings/ingest`: el corpus se
   carga a mano desde un JSON ya normalizado, y la limpieza y la PII siguen sin cablear (AGENTS.md §7 #8).
+- **Nombres propios hacia proveedores externos.** La transcripción nombra al cliente y a su familia. La
+  redacción de los guardrails de entrada (`redact_pii`) solo cubre emails, teléfonos e IBAN, así que esos nombres
+  llegarían tal cual a un LLM y al embedder externos. La pseudonimización con Presidio (`services/ingestion/pii/`)
+  existe pero no está conectada a ningún flujo.
 - **Escala.** Con 60 chunks el planner ignora el índice HNSW y hace un seq scan (más barato a ese tamaño). No es
   un fallo hoy, pero las cifras de latencia del trace no dicen nada de cómo se comportará con el corpus real.
 
@@ -380,3 +399,14 @@ por requisito + huecos → contexto → estimación con citas.
 como una sola consulta. Sin descomponerla, filtrar, re-ordenar o agregar solo pule un top-5 que ya llega sesgado
 hacia una sola necesidad. Con ella, incluso el retriever actual devolvería análogos para el panel, los pagos y el
 email.
+
+Dos condiciones de la propuesta, sin entrar en implementación:
+
+- **Datos personales antes de salir del servicio.** `POST /transcripts/estimate` entra por los guardrails de
+  entrada que ya existen (`get_safe_request`), así que la transcripción llega a `RequirementExtractor` (LLM) y al
+  embedder con emails, teléfonos e IBAN ya redactados. Los nombres (el cliente, la sobrina, el primo) no los cubre
+  esa redacción: ver "Otros".
+- **Caché y contexto recuperado.** Hoy `EstimationRequest` no lleva contexto, así que las claves de los cachés
+  exacto y semántico no lo distinguen. Si el generador recibe análogos, o la clave incluye una huella del contexto
+  o se saltean los dos cachés, como ya hacen `/estimate/reviewed` y los turnos de sesión. Si no, dos transcripciones
+  con análogos distintos podrían recibir la misma respuesta, con citas y huecos que no les corresponden.
