@@ -275,16 +275,70 @@ uv run python scripts/compare.py --text-a "OAuth 2.0 authentication backend for 
   GIN index lets us query arbitrary keys without a migration per new key; a key is promoted to a typed column
   only once it becomes a hot filter.
 - **`cosine_distance`, not L2 or inner product.** OpenAI embeddings are normalized, so all three would rank the
-  same; cosine is the RAG convention and, above all, matches the `vector_cosine_ops` operator class of the HNSW
-  index added live. If the query operator and the index's operator class differ, Postgres **silently** ignores
+  same; cosine is the RAG convention and, above all, matches the cosine operator class of the HNSW
+  index added live (`halfvec_cosine_ops`, migration 0003). If the query operator and the index's operator class differ, Postgres **silently** ignores
   the index and falls back to a sequential scan.
-- **No vector index yet, on purpose.** With 17 budgets / 60 chunks the sequential scan answers in a few hundred
-  ms, and it is the baseline the live session measures HNSW against; adding it now would hide what we want to
-  observe. Also out of scope until the live session: metadata filters, hybrid search and Postgres tuning.
+- **No vector index in migration 0002, on purpose.** With 17 budgets / 60 chunks the sequential scan answers in a
+  few hundred ms, and it was the baseline the live session measured HNSW against. The final state of that session
+  lives in migration `0003_session8_hnsw_halfvec` (see below). Metadata filters and hybrid search remain out of scope.
 - `embedding` is nullable (insert now, embed later in future async ingestion; here both land atomically) and
   `vector(1536)` is hardcoded to `text-embedding-3-small` (changing it means re-embedding the whole corpus).
 - Alembic stays sync (psycopg) like session 6 and registers the `vector` type for reflection; the request path
   uses an asyncpg engine whose URL is derived from the same `DATABASE_URL`, so one variable configures both.
+
+#### Session 8 live: HNSW on halfvec, tuning and operations
+
+Migration `0003_session8_hnsw_halfvec` creates `chunks_embedding_halfvec_idx`: HNSW (`m = 16`, `ef_construction =
+128`) on the expression `(embedding::halfvec(1536))` with `halfvec_cosine_ops`. The column stays `vector(1536)`;
+only the index is half precision (about half the size, indistinguishable results for normalized embeddings).
+It is an **expression index**, so `PostgresChunkStore.search` orders by the same `halfvec` cast; a plain
+`embedding <=> q` silently falls back to a sequential scan. A unit test pins the compiled SQL.
+
+`estimator-postgres` in `docker-compose.yml` carries build-tuning flags (`shm_size`, `shared_buffers`,
+`maintenance_work_mem`, `max_parallel_maintenance_workers`). They are conservative dev values; in production they
+scale with the host RAM. Recreate the container after pulling them: `docker compose up -d estimator-postgres`.
+
+Measurement and maintenance tools live in `scripts/s08/` (dev tools, never part of pytest or CI). Run them from the
+repo root with the schema migrated (`uv run alembic upgrade head`) and `OPENAI_API_KEY` set. Those that embed the
+benchmark queries or synthetic chunks make **billed** embedding calls.
+
+| Script | What it does |
+|---|---|
+| `measure_baseline_s08.py` | SQL-only latency of the 5 benchmark queries (1 warm-up + 2 runs), plus a pgvector literal for the psql demos. |
+| `sweep_ef_search_s08.py` | Sweeps `hnsw.ef_search`, measures latency and recall against a forced sequential scan, and marks the sweet spot. |
+| `compare_indexes_s08.py` | Full-precision vs halfvec index on the 5 queries: top-5, overlap and latency (needs `sql/01_create_hnsw.sql` first). |
+| `report_index_sizes_s08.py` | Type, size, `idx_scan` and last use of every index on `chunks` (read-only, no billed calls). |
+| `insert_synthetic_chunks_s08.py` | Inserts synthetic chunks with real embeddings (`count`, default 100; `30000` fattens the corpus). Clean up with `DELETE FROM documents WHERE document_type = 'synthetic_test';`. |
+
+SQL snippets in `scripts/s08/sql/` run in psql, which lives in the Postgres container:
+
+```bash
+docker compose exec -T estimator-postgres psql -U estimator -d estimator < scripts/s08/sql/01_create_hnsw.sql
+docker compose exec estimator-postgres psql -U estimator -d estimator   # interactive: paste blocks
+```
+
+| Order | Snippet | Topic |
+|---|---|---|
+| 1 | `01_create_hnsw.sql` | Teaching step: full-precision HNSW (`vector_cosine_ops`, `chunks_embedding_idx`) |
+| 2 | `02_test_antipatron.sql` | Silent antipattern: `<=>` vs `<->` (and the missing cast) with `EXPLAIN ANALYZE` |
+| 3 | `03_create_halfvec.sql` | The halfvec index (already created by the migration; `IF NOT EXISTS`) and size comparison |
+| 4 | `04_monitoring_queries.sql` | Monitoring with `pg_stat_user_indexes` |
+| 5 | `05_maintenance_cycle.sql` | ANALYZE, VACUUM, REINDEX CONCURRENTLY |
+| 99 | `99_revert_live_session.sql` | Rehearsal cleanup: drops the teaching index and extra synthetic rows, keeps the migration's index |
+
+The canonical monitoring query:
+
+```sql
+SELECT indexrelname, idx_scan, last_idx_scan,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS size
+FROM pg_stat_user_indexes
+WHERE relname = 'chunks'
+ORDER BY idx_scan DESC;
+```
+
+A vector index with `idx_scan = 0` after serving semantic queries almost surely means the query does not match the
+index (wrong operator class, or the `halfvec` cast is missing). For a no-index baseline, use `SET enable_indexscan =
+off;` in a psql session instead of dropping the migration's index.
 
 ## Tests
 
@@ -336,7 +390,7 @@ data/           # ingestion catalog, seed files and budgets_sample.json (embeddi
 web/src/        # React UI: api client, components, hooks
 tests/          # pytest
 evals/          # golden dataset, metrics and CLI runner (real LLM calls; dev tool); stress/ harness
-scripts/        # dev runner, CI scripts, ingestion/ demos and preflight, compare.py (cosine similarity), query_examples.py (semantic search)
+scripts/        # dev runner, CI scripts, ingestion/ demos and preflight, compare.py (cosine similarity), query_examples.py (semantic search), s08/ (HNSW measurement and maintenance tools)
 docs/           # architecture diagrams, screenshots, sample descriptions
 ```
 

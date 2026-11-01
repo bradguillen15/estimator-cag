@@ -39,7 +39,7 @@ libraries, **not yet wired into the run** (see §7).
 
 Embedding pipeline (`app/embedding_pipeline/`, course reference layout, §7 #12): `POST /embeddings/ingest` persists one
 budget as a `documents` row plus its embedded `chunks` (pgvector) in one transaction (409 on a duplicate `source_path`);
-`POST /search` embeds the query and returns the k nearest chunks by cosine distance (no vector index yet, on purpose).
+`POST /search` embeds the query and returns the k nearest chunks by cosine distance, served by an HNSW index on the `halfvec` cast of the embedding (migration 0003; the search statement must repeat that cast or the index is silently ignored).
 
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
@@ -124,6 +124,7 @@ app/embedding_pipeline/  # Sessions 7-8 (course reference layout): schemas · ch
 app/persistence/         # Postgres (SQLAlchemy models incl. pgvector documents/chunks, sync + async engine builders, repositories); the only code importing sqlalchemy/psycopg/asyncpg/pgvector
 alembic/                 # DB migrations (`uv run alembic upgrade head`)
 data/                    # catalog/catalog.yaml + seed/ source files for ingestion; budgets_sample.json (embedding corpus)
+scripts/s08/             # session 8 live: HNSW measurement/maintenance tools (billed embeddings, never in CI) + sql/ snippets
 scripts/ingestion/       # demo_cleaning.py, demo_pii.py, preflight.py (CLI tools, may import app.*)
 
 tests/                   # pytest: prompts, schemas, provider (patched litellm.completion), service, routes
