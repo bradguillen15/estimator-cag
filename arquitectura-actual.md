@@ -21,6 +21,10 @@ Leyenda: verde = servicio IA implementado (ingesta, vectorización, búsqueda); 
 negocio, que hoy estiman por CAG sin usar el servicio IA;
 la línea roja discontinua marca **dónde acaba hoy** el camino de una transcripción.
 
+Versión interactiva (archify, con las fuentes de cada nodo):
+[ver diagrama](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/session-09/pre-work/docs/architecture/s09-current/s09-current.html)
+· fuente: [`docs/architecture/s09-current/candidate.json`](docs/architecture/s09-current/candidate.json).
+
 ```mermaid
 flowchart LR
   subgraph FE["Frontend · web/ (React 19 + Vite)"]
@@ -302,6 +306,10 @@ el sistema no lo dice: simplemente no lo devuelve.
 ## 4. Propuesta de evolución arquitectónica
 
 Leyenda: naranja con borde grueso = **nuevo**; verde = existente que se reutiliza; gris = existente sin cambios.
+
+Versión interactiva (archify; lo nuevo va en grupos "NEW (proposal)" con la etiqueta `NEW`):
+[ver diagrama](https://htmlpreview.github.io/?https://github.com/bradguillen15/estimator-cag/blob/session-09/pre-work/docs/architecture/s09-proposed/s09-proposed.html)
+· fuente: [`docs/architecture/s09-proposed/candidate.json`](docs/architecture/s09-proposed/candidate.json).
 
 ```mermaid
 flowchart LR
