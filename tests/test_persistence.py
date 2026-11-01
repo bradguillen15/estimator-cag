@@ -49,3 +49,16 @@ def test_models_declare_expected_tables() -> None:
 
 def test_postgres_store_satisfies_mapping_store_protocol() -> None:
     assert isinstance(PostgresMappingStore(session=None), MappingStore)  # type: ignore[arg-type]
+
+
+def test_search_statement_orders_by_the_halfvec_cast_the_hnsw_index_is_built_on() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    from app.persistence.repositories.chunks import _search_statement
+
+    sql = str(_search_statement([0.1, 0.2], 3).compile(dialect=postgresql.dialect()))
+
+    order_by = sql.split("ORDER BY", 1)[1]
+    assert "HALFVEC(1536)" in order_by.upper()
+    assert "<=>" in order_by
+    assert "LIMIT" in sql

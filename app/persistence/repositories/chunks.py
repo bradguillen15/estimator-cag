@@ -5,13 +5,36 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from sqlalchemy import select
+from pgvector.sqlalchemy import HALFVEC
+from sqlalchemy import Select, cast, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.embedding_pipeline.schemas import EmbeddedChunk, SearchHit
 from app.embedding_pipeline.store import BUDGET_COMPONENT, DuplicateDocumentError
-from app.persistence.models import ChunkRow, DocumentRow
+from app.persistence.models import EMBEDDING_DIMENSIONS, ChunkRow, DocumentRow
+
+
+def _search_statement(query_vector: list[float], k: int) -> Select:
+    """k-NN statement ordered by cosine distance on the ``halfvec`` cast of the embedding.
+
+    The cast must match the expression of ``chunks_embedding_halfvec_idx`` (migration 0003) exactly; otherwise the
+    planner silently ignores the HNSW index and falls back to a sequential scan.
+    """
+    distance = cast(ChunkRow.embedding, HALFVEC(EMBEDDING_DIMENSIONS)).cosine_distance(query_vector)
+    return (
+        select(
+            ChunkRow.id,
+            ChunkRow.document_id,
+            ChunkRow.chunk_type,
+            ChunkRow.content,
+            ChunkRow.metadata_,
+            distance.label("distance"),
+        )
+        .where(ChunkRow.embedding.is_not(None))
+        .order_by(distance)
+        .limit(k)
+    )
 
 
 class SqlChunkStoreTransaction:
@@ -67,26 +90,14 @@ class PostgresChunkStore:
             yield SqlChunkStoreTransaction(session)
 
     async def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
-        """k-NN by cosine distance (pgvector ``<=>``). No vector index yet, so this is a sequential scan.
+        """k-NN by cosine distance (pgvector ``<=>``), served by the HNSW halfvec index (migration 0003).
 
         Cosine rather than L2 or inner product: OpenAI embeddings are normalized, so the ranking would match, but
-        cosine is the RAG convention and lines up with the ``vector_cosine_ops`` operator class of a future HNSW
-        index (an operator that does not match the index's operator class makes Postgres silently skip it).
+        cosine is the RAG convention and matches the ``halfvec_cosine_ops`` operator class of the index. The index
+        is an expression index, so the ORDER BY must use the exact same ``embedding::halfvec(1536)`` cast and a
+        cosine operator; anything else (plain ``embedding <=> q``, ``<->``) is silently a sequential scan.
         """
-        distance = ChunkRow.embedding.cosine_distance(query_vector)
-        stmt = (
-            select(
-                ChunkRow.id,
-                ChunkRow.document_id,
-                ChunkRow.chunk_type,
-                ChunkRow.content,
-                ChunkRow.metadata_,
-                distance.label("distance"),
-            )
-            .where(ChunkRow.embedding.is_not(None))
-            .order_by(distance)
-            .limit(k)
-        )
+        stmt = _search_statement(query_vector, k)
         async with self._session_factory() as session:
             rows = (await session.execute(stmt)).all()
         return [
