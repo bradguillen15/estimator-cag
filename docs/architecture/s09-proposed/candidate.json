@@ -1,0 +1,453 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Estimator CAG Proposed Transcript-to-Estimate Architecture",
+    "output": "docs/architecture/s09-proposed/s09-proposed.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "git@github.com:bradguillen15/estimator-cag.git",
+      "link_mode": "local-only",
+      "revision": "89c0b2592917d94097c9a2ae140ce3e3f601576d"
+    }
+  },
+  "components": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Estimation chat",
+      "sublabel": "web/ · existing",
+      "tag": "REUSED",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/src/hooks/useSession.ts",
+          "line": 212,
+          "end_line": 225
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "line": 105,
+          "end_line": 129
+        }
+      ]
+    },
+    {
+      "id": "te",
+      "type": "backend",
+      "label": "POST /transcripts/estimate",
+      "sublabel": "new route",
+      "tag": "NEW",
+      "pos": [
+        340,
+        60
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "orc",
+      "type": "backend",
+      "label": "TranscriptEstimationFlow",
+      "sublabel": "orchestrator",
+      "tag": "NEW",
+      "pos": [
+        340,
+        210
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "uir",
+      "type": "frontend",
+      "label": "Evidence view",
+      "sublabel": "cited analogs · gaps · questions",
+      "tag": "NEW",
+      "pos": [
+        40,
+        210
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "qp",
+      "type": "backend",
+      "label": "QueryPlanner",
+      "sublabel": "1 short English query each",
+      "tag": "NEW",
+      "pos": [
+        940,
+        210
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "rx",
+      "type": "backend",
+      "label": "RequirementExtractor",
+      "sublabel": "must / optional / doubtful",
+      "tag": "NEW",
+      "pos": [
+        640,
+        210
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "eb",
+      "type": "cloud",
+      "label": "OpenAIEmbedder",
+      "sublabel": "text-embedding-3-small",
+      "tag": "REUSED",
+      "pos": [
+        640,
+        510
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/embedder.py",
+          "line": 41,
+          "end_line": 52
+        }
+      ]
+    },
+    {
+      "id": "rt",
+      "type": "backend",
+      "label": "SemanticRetriever",
+      "sublabel": "k-NN per query",
+      "tag": "REUSED",
+      "pos": [
+        940,
+        360
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/retriever.py",
+          "line": 22,
+          "end_line": 35
+        }
+      ]
+    },
+    {
+      "id": "rr",
+      "type": "backend",
+      "label": "RelevanceFilter",
+      "sublabel": "re-rank + threshold",
+      "tag": "NEW",
+      "pos": [
+        940,
+        510
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "agg",
+      "type": "backend",
+      "label": "AnalogAggregator",
+      "sublabel": "by budget, diversity, quality",
+      "tag": "NEW",
+      "pos": [
+        940,
+        660
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "sublabel": "chunks · documents",
+      "tag": "REUSED",
+      "pos": [
+        640,
+        360
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/persistence/models.py",
+          "line": 61,
+          "end_line": 110
+        },
+        {
+          "path": "app/persistence/repositories/chunks.py",
+          "line": 92,
+          "end_line": 113
+        },
+        {
+          "path": "alembic/versions/0003_session8_hnsw_halfvec.py",
+          "line": 35,
+          "end_line": 42
+        }
+      ]
+    },
+    {
+      "id": "ctx",
+      "type": "backend",
+      "label": "ContextBuilder",
+      "sublabel": "analogs + provenance",
+      "tag": "NEW",
+      "pos": [
+        640,
+        810
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "gap",
+      "type": "backend",
+      "label": "CoverageChecker",
+      "sublabel": "no analog = explicit gap",
+      "tag": "NEW",
+      "pos": [
+        940,
+        810
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "svc",
+      "type": "backend",
+      "label": "EstimationService",
+      "sublabel": "generator + guardrails + critic",
+      "tag": "REUSED",
+      "pos": [
+        340,
+        810
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 70,
+          "end_line": 93
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 147,
+          "end_line": 172
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LiteLLM",
+      "sublabel": "unchanged",
+      "tag": "UNCHANGED",
+      "pos": [
+        40,
+        810
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/llm/litellm.py",
+          "line": 85,
+          "end_line": 100
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "NEW (proposal) · API + orchestration",
+      "wraps": [
+        "te",
+        "orc"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "NEW (proposal) · transcript understanding",
+      "wraps": [
+        "rx",
+        "qp"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "NEW (proposal) · refinement",
+      "wraps": [
+        "rr",
+        "agg",
+        "gap"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "NEW (proposal) · augmentation",
+      "wraps": [
+        "ctx"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ui-te",
+      "from": "ui",
+      "to": "te",
+      "label": "transcript",
+      "variant": "emphasis"
+    },
+    {
+      "id": "te-orc",
+      "from": "te",
+      "to": "orc"
+    },
+    {
+      "id": "orc-rx",
+      "from": "orc",
+      "to": "rx",
+      "label": "transcript"
+    },
+    {
+      "id": "rx-qp",
+      "from": "rx",
+      "to": "qp",
+      "label": "Requirement[]"
+    },
+    {
+      "id": "qp-rt",
+      "from": "qp",
+      "to": "rt",
+      "label": "Query[] (1 per requirement)"
+    },
+    {
+      "id": "rt-pg",
+      "from": "rt",
+      "to": "pg",
+      "label": "k-NN"
+    },
+    {
+      "id": "rt-eb",
+      "from": "rt",
+      "to": "eb",
+      "label": "embed query",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "rt-rr",
+      "from": "rt",
+      "to": "rr",
+      "label": "hits per query"
+    },
+    {
+      "id": "rr-agg",
+      "from": "rr",
+      "to": "agg",
+      "label": "relevant hits"
+    },
+    {
+      "id": "agg-gap",
+      "from": "agg",
+      "to": "gap",
+      "label": "Analog[] per requirement"
+    },
+    {
+      "id": "gap-ctx",
+      "from": "gap",
+      "to": "ctx",
+      "label": "analogs + gaps"
+    },
+    {
+      "id": "ctx-svc",
+      "from": "ctx",
+      "to": "svc",
+      "label": "prompt context",
+      "variant": "emphasis"
+    },
+    {
+      "id": "svc-llm",
+      "from": "svc",
+      "to": "llm"
+    },
+    {
+      "id": "svc-orc",
+      "from": "svc",
+      "to": "orc",
+      "label": "estimate + citations + gaps"
+    },
+    {
+      "id": "orc-uir",
+      "from": "orc",
+      "to": "uir",
+      "label": "evidence"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "orange",
+      "title": "How to read it",
+      "items": [
+        "Modules tagged NEW inside a NEW (proposal) group do not exist in the repo yet, so they cite no source files.",
+        "REUSED nodes cite the code that exists today; LiteLLM is UNCHANGED."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Failures each new module addresses",
+      "items": [
+        "RequirementExtractor: one query per need, not one per meeting (failures 1, 2).",
+        "QueryPlanner + RelevanceFilter: short English queries and a relevance threshold (1, 3).",
+        "AnalogAggregator: grouped by budget with diversity and data quality (4).",
+        "ContextBuilder + TranscriptEstimationFlow: retrieval finally feeds generation (5).",
+        "CoverageChecker: requirements without analogs become explicit gaps."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,605 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Estimator CAG Architecture at End of Session 8",
+    "output": "docs/architecture/s09-current/s09-current.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "git@github.com:bradguillen15/estimator-cag.git",
+      "link_mode": "local-only",
+      "revision": "89c0b2592917d94097c9a2ae140ce3e3f601576d"
+    }
+  },
+  "components": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Estimation chat",
+      "sublabel": "web/ · React 19 + Vite",
+      "tag": "sessions + attachments",
+      "pos": [
+        40,
+        130
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/src/hooks/useSession.ts",
+          "line": 212,
+          "end_line": 225
+        },
+        {
+          "path": "web/src/api/client.ts",
+          "line": 105,
+          "end_line": 129
+        }
+      ]
+    },
+    {
+      "id": "est",
+      "type": "backend",
+      "label": "POST /estimate",
+      "sublabel": "/stream · /reviewed",
+      "pos": [
+        270,
+        60
+      ],
+      "size": [
+        200,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/routers/estimations.py",
+          "line": 42,
+          "end_line": 53
+        },
+        {
+          "path": "app/routers/estimations.py",
+          "line": 56,
+          "end_line": 59
+        },
+        {
+          "path": "app/routers/estimations.py",
+          "line": 71,
+          "end_line": 77
+        }
+      ]
+    },
+    {
+      "id": "ses",
+      "type": "backend",
+      "label": "POST /sessions/{id}/estimate",
+      "sublabel": "GET /sessions",
+      "pos": [
+        270,
+        200
+      ],
+      "size": [
+        200,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/routers/sessions.py",
+          "line": 39,
+          "end_line": 51
+        },
+        {
+          "path": "app/routers/sessions.py",
+          "line": 84,
+          "end_line": 101
+        }
+      ]
+    },
+    {
+      "id": "ingr",
+      "type": "backend",
+      "label": "POST /ingestion/runs",
+      "sublabel": "GET /ingestion/jobs/{id}",
+      "pos": [
+        270,
+        340
+      ],
+      "size": [
+        200,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/routers/ingestion.py",
+          "line": 17,
+          "end_line": 28
+        }
+      ]
+    },
+    {
+      "id": "svc",
+      "type": "backend",
+      "label": "EstimationService",
+      "sublabel": "CAG prompt v3, fixed examples",
+      "tag": "cache + guardrails + critic",
+      "pos": [
+        560,
+        130
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 70,
+          "end_line": 93
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 147,
+          "end_line": 172
+        },
+        {
+          "path": "app/prompts/estimation/v3/system.j2",
+          "line": 68,
+          "end_line": 72
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LiteLLM",
+      "sublabel": "Anthropic / OpenAI",
+      "pos": [
+        860,
+        130
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/services/llm/litellm.py",
+          "line": 85,
+          "end_line": 100
+        }
+      ]
+    },
+    {
+      "id": "cat",
+      "type": "backend",
+      "label": "catalog.yaml",
+      "sublabel": "load_catalog",
+      "pos": [
+        270,
+        500
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/services/ingestion/catalog/loader.py",
+          "line": 18,
+          "end_line": 21
+        }
+      ]
+    },
+    {
+      "id": "load",
+      "type": "backend",
+      "label": "FileSystemLoader",
+      "sublabel": "iter_blobs",
+      "pos": [
+        490,
+        500
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/services/ingestion/loaders.py",
+          "line": 24,
+          "end_line": 40
+        }
+      ]
+    },
+    {
+      "id": "parse",
+      "type": "backend",
+      "label": "ParserRegistry",
+      "sublabel": "blob to Document",
+      "pos": [
+        710,
+        500
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/services/ingestion/parsers/registry.py",
+          "line": 14,
+          "end_line": 30
+        },
+        {
+          "path": "app/services/ingestion/orchestrator.py",
+          "line": 53,
+          "end_line": 66
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "type": "database",
+      "label": "ingestion_jobs",
+      "sublabel": "job status",
+      "pos": [
+        970,
+        500
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/persistence/models.py",
+          "line": 44,
+          "end_line": 58
+        }
+      ]
+    },
+    {
+      "id": "ei",
+      "type": "backend",
+      "label": "/embeddings/ingest",
+      "sublabel": "POST · 1 budget JSON",
+      "pos": [
+        270,
+        700
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/router.py",
+          "line": 23,
+          "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "ch",
+      "type": "backend",
+      "label": "chunker",
+      "sublabel": "1 component = 1 chunk",
+      "pos": [
+        490,
+        700
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/chunker.py",
+          "line": 32,
+          "end_line": 40
+        }
+      ]
+    },
+    {
+      "id": "eb",
+      "type": "cloud",
+      "label": "OpenAIEmbedder",
+      "sublabel": "text-embedding-3-small · 1536d",
+      "pos": [
+        710,
+        700
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/embedder.py",
+          "line": 41,
+          "end_line": 52
+        }
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "Postgres + pgvector",
+      "sublabel": "documents · chunks",
+      "tag": "HNSW halfvec cosine",
+      "pos": [
+        970,
+        835
+      ],
+      "size": [
+        150,
+        90
+      ],
+      "sources": [
+        {
+          "path": "app/persistence/models.py",
+          "line": 61,
+          "end_line": 110
+        },
+        {
+          "path": "app/persistence/repositories/chunks.py",
+          "line": 92,
+          "end_line": 113
+        },
+        {
+          "path": "alembic/versions/0003_session8_hnsw_halfvec.py",
+          "line": 35,
+          "end_line": 42
+        }
+      ]
+    },
+    {
+      "id": "sr",
+      "type": "backend",
+      "label": "POST /search",
+      "sublabel": "query ≤ 2000 chars, k ≤ 50",
+      "pos": [
+        490,
+        850
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/search_router.py",
+          "line": 21,
+          "end_line": 36
+        },
+        {
+          "path": "app/embedding_pipeline/schemas.py",
+          "line": 101,
+          "end_line": 105
+        }
+      ]
+    },
+    {
+      "id": "rt",
+      "type": "backend",
+      "label": "SemanticRetriever",
+      "sublabel": "embed_one(query) + k-NN",
+      "pos": [
+        710,
+        850
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/retriever.py",
+          "line": 22,
+          "end_line": 35
+        }
+      ]
+    },
+    {
+      "id": "stop",
+      "type": "security",
+      "label": "END OF IMPLEMENTED PATH",
+      "sublabel": "nothing consumes SearchHit[]",
+      "tag": "no consumer",
+      "pos": [
+        40,
+        850
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "app/embedding_pipeline/search_router.py",
+          "line": 32,
+          "end_line": 33
+        },
+        {
+          "path": "app/services/estimation_service.py",
+          "line": 168,
+          "end_line": 169
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Business backend · FastAPI /api/v1",
+      "wraps": [
+        "est",
+        "ses",
+        "ingr",
+        "svc",
+        "llm"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "AI service · ingest/ (app/services/ingestion)",
+      "wraps": [
+        "cat",
+        "load",
+        "parse"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "AI service · embedding_pipeline/",
+      "wraps": [
+        "ei",
+        "ch",
+        "eb",
+        "sr",
+        "rt"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "AI service · storage/ (app/persistence)",
+      "wraps": [
+        "jobs",
+        "pg"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ui-est",
+      "from": "ui",
+      "to": "est"
+    },
+    {
+      "id": "ui-ses",
+      "from": "ui",
+      "to": "ses",
+      "label": "text + files",
+      "variant": "emphasis"
+    },
+    {
+      "id": "est-svc",
+      "from": "est",
+      "to": "svc"
+    },
+    {
+      "id": "ses-svc",
+      "from": "ses",
+      "to": "svc"
+    },
+    {
+      "id": "svc-llm",
+      "from": "svc",
+      "to": "llm",
+      "label": "system + user prompt"
+    },
+    {
+      "id": "ingr-cat",
+      "from": "ingr",
+      "to": "cat",
+      "label": "start run",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "cat-load",
+      "from": "cat",
+      "to": "load"
+    },
+    {
+      "id": "load-parse",
+      "from": "load",
+      "to": "parse"
+    },
+    {
+      "id": "parse-jobs",
+      "from": "parse",
+      "to": "jobs",
+      "label": "job state",
+      "variant": "dashed"
+    },
+    {
+      "id": "ei-ch",
+      "from": "ei",
+      "to": "ch",
+      "label": "Budget"
+    },
+    {
+      "id": "ch-eb",
+      "from": "ch",
+      "to": "eb",
+      "label": "Chunk[]"
+    },
+    {
+      "id": "eb-pg",
+      "from": "eb",
+      "to": "pg",
+      "label": "EmbeddedChunk[]",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "sr-rt",
+      "from": "sr",
+      "to": "rt",
+      "label": "query: str"
+    },
+    {
+      "id": "rt-eb",
+      "from": "rt",
+      "to": "eb",
+      "label": "vector 1536d",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "rt-pg",
+      "from": "rt",
+      "to": "pg",
+      "label": "halfvec cosine k-NN"
+    },
+    {
+      "id": "pg-sr",
+      "from": "pg",
+      "to": "sr",
+      "label": "SearchHit[] (chunk, distance)",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    },
+    {
+      "id": "sr-stop",
+      "from": "sr",
+      "to": "stop",
+      "label": "top-k chunks",
+      "variant": "security",
+      "width": 3
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Where the transcript path ends",
+      "items": [
+        "/search returns SearchHit[] (chunks + distances) and stops.",
+        "Nothing groups hits by budget, builds a prompt or produces hours.",
+        "A real transcript does not even enter: SearchRequest.query is capped at 2000 chars (422)."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Two halves, not connected",
+      "items": [
+        "CAG: EstimationService uses fixed examples from prompts/estimation/v3/examples.j2.",
+        "RAG: embedding_pipeline and storage serve /search and feed nothing.",
+        "ingest/ and /embeddings/ingest are also separate: the corpus is loaded from normalized JSON."
+      ]
+    }
+  ]
+}
