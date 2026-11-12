@@ -14,8 +14,16 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.embedding_pipeline.chunker import JSONStructuralChunker
 from app.embedding_pipeline.embedder import OpenAIEmbedder
+from app.embedding_pipeline.ingest_service import EmbeddingIngestService
+from app.embedding_pipeline.retriever import SemanticRetriever
 from app.exceptions import UnknownPromptVersionError
-from app.persistence.database import build_engine, build_session_factory
+from app.persistence.database import (
+    build_async_engine,
+    build_async_session_factory,
+    build_engine,
+    build_session_factory,
+)
+from app.persistence.repositories.chunks import PostgresChunkStore
 from app.persistence.repositories.jobs import sql_jobs_scope
 from app.persistence.repositories.mappings import PostgresMappingStore
 from app.prompts.loader import PROMPT_VERSION, available_prompt_versions
@@ -57,6 +65,31 @@ def get_openai_embedder() -> OpenAIEmbedder | None:
         return None
     # max_retries=0: OpenAIEmbedder owns the rate-limit retries; the SDK's own 2 would multiply them.
     return OpenAIEmbedder(client=OpenAI(api_key=settings.openai_api_key, max_retries=0))
+
+
+@lru_cache
+def get_chunk_store() -> PostgresChunkStore:
+    """pgvector store on the async engine (session 8); the engine connects lazily."""
+    return PostgresChunkStore(build_async_session_factory(build_async_engine(settings.database_url)))
+
+
+@lru_cache
+def get_embedding_ingest_service() -> EmbeddingIngestService | None:
+    """Chunk -> embed -> persist. ``None`` without an OpenAI key (like ``get_openai_embedder``); the router maps
+    that to a 500."""
+    embedder = get_openai_embedder()
+    if embedder is None:
+        return None
+    return EmbeddingIngestService(chunker=get_chunker(), embedder=embedder, store=get_chunk_store())
+
+
+@lru_cache
+def get_semantic_retriever() -> SemanticRetriever | None:
+    """Query side of the vector store; same ``None`` contract as the ingest service."""
+    embedder = get_openai_embedder()
+    if embedder is None:
+        return None
+    return SemanticRetriever(embedder=embedder, store=get_chunk_store())
 
 def _get_semantic_cache() -> SemanticCache:
     if not settings.semantic_cache_enabled:

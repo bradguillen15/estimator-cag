@@ -1,5 +1,6 @@
 import importlib
 
+import pytest
 from sqlalchemy import Engine
 
 import app.persistence.database as database
@@ -20,8 +21,26 @@ def test_build_engine_is_lazy() -> None:
     assert database.build_session_factory(engine) is not None
 
 
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("postgresql+psycopg://u:p@h:5433/db", "postgresql+asyncpg://u:p@h:5433/db"),
+        ("postgresql://u:p@h/db", "postgresql+asyncpg://u:p@h/db"),
+        ("postgresql+asyncpg://u:p@h/db", "postgresql+asyncpg://u:p@h/db"),
+    ],
+)
+def test_async_url_swaps_the_driver(url: str, expected: str) -> None:
+    assert database.async_database_url(url) == expected
+
+
+def test_build_async_engine_is_lazy() -> None:
+    engine = database.build_async_engine("postgresql+psycopg://u:p@localhost:1/db")
+    assert engine.url.drivername == "postgresql+asyncpg"
+    assert database.build_async_session_factory(engine) is not None
+
+
 def test_models_declare_expected_tables() -> None:
-    assert set(Base.metadata.tables) == {"pseudonym_mappings", "ingestion_jobs"}
+    assert set(Base.metadata.tables) == {"pseudonym_mappings", "ingestion_jobs", "documents", "chunks"}
     mappings = Base.metadata.tables["pseudonym_mappings"]
     assert {c.name for c in mappings.columns} == {
         "id", "entity_type", "original_hash", "pseudonym", "created_at",
@@ -30,3 +49,16 @@ def test_models_declare_expected_tables() -> None:
 
 def test_postgres_store_satisfies_mapping_store_protocol() -> None:
     assert isinstance(PostgresMappingStore(session=None), MappingStore)  # type: ignore[arg-type]
+
+
+def test_search_statement_orders_by_the_halfvec_cast_the_hnsw_index_is_built_on() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    from app.persistence.repositories.chunks import _search_statement
+
+    sql = str(_search_statement([0.1, 0.2], 3).compile(dialect=postgresql.dialect()))
+
+    order_by = sql.split("ORDER BY", 1)[1]
+    assert "HALFVEC(1536)" in order_by.upper()
+    assert "<=>" in order_by
+    assert "LIMIT" in sql
