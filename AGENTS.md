@@ -40,6 +40,7 @@ libraries, **not yet wired into the run** (see §7).
 Embedding pipeline (`app/embedding_pipeline/`, course reference layout, §7 #12): `POST /embeddings/ingest` persists one
 budget as a `documents` row plus its embedded `chunks` (pgvector) in one transaction (409 on a duplicate `source_path`);
 `POST /search` embeds the query and returns the k nearest chunks by cosine distance, served by an HNSW index on the `halfvec` cast of the embedding (migration 0003; the search statement must repeat that cast or the index is silently ignored).
+Session 10 adds `mode` (`vector` | `hybrid`: vector + full-text on the generated `content_tsv` column, migration 0004, fused with RRF in `fusion.py`) and `rerank` (cross-encoder in `reranker.py`, recall `RERANK_RECALL_K` then keep `RERANK_TOP_N`) to `/search`; both default to settings. `sentence_transformers` is imported lazily, inside the reranker only. Measured with `uv run python -m evals.retrieval.run` (billed embeddings; report: `evals/retrieval/REPORT.md`).
 
 Session conversations add `POST /api/v1/sessions[/{id}/estimate]` plus `GET /api/v1/sessions` (summaries of
 sessions with at least one turn, most recent first) and `GET /api/v1/sessions/{id}` (project memory, turn
