@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from pgvector.sqlalchemy import HALFVEC
-from sqlalchemy import Select, cast, select
+from sqlalchemy import Select, Text, cast, func, literal_column, select
+from sqlalchemy.dialects.postgresql import TSQUERY
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -33,6 +34,34 @@ def _search_statement(query_vector: list[float], k: int) -> Select:
         )
         .where(ChunkRow.embedding.is_not(None))
         .order_by(distance)
+        .limit(k)
+    )
+
+
+def _lexical_statement(query_text: str, k: int) -> Select:
+    """Full-text statement over ``content_tsv`` (GIN index of migration 0004), OR semantics.
+
+    ``plainto_tsquery`` sanitizes arbitrary user text (no operator injection) but joins the terms with ``&``; the
+    ``replace`` turns it into ``|`` so a long project description matches any of its terms and ``ts_rank_cd``
+    orders by how many/how close they are. An all-stop-word query yields an empty tsquery that matches nothing.
+    The config (``english``) must match the one of the generated column.
+    """
+    tsquery = cast(
+        func.replace(
+            cast(func.plainto_tsquery(literal_column("'english'::regconfig"), query_text), Text), "&", "|"
+        ),
+        TSQUERY,
+    )
+    return (
+        select(
+            ChunkRow.id,
+            ChunkRow.document_id,
+            ChunkRow.chunk_type,
+            ChunkRow.content,
+            ChunkRow.metadata_,
+        )
+        .where(ChunkRow.content_tsv.op("@@")(tsquery))
+        .order_by(func.ts_rank_cd(ChunkRow.content_tsv, tsquery).desc(), ChunkRow.id)
         .limit(k)
     )
 
@@ -107,6 +136,23 @@ class PostgresChunkStore:
                 chunk_type=row.chunk_type,
                 content=row.content,
                 distance=float(row.distance),
+                metadata=row.metadata_,
+            )
+            for row in rows
+        ]
+
+    async def search_lexical(self, query_text: str, k: int) -> list[SearchHit]:
+        """Full-text search (``content_tsv @@ tsquery``, GIN-served), ranked by ``ts_rank_cd``; no distance."""
+        stmt = _lexical_statement(query_text, k)
+        async with self._session_factory() as session:
+            rows = (await session.execute(stmt)).all()
+        return [
+            SearchHit(
+                chunk_id=row.id,
+                document_id=row.document_id,
+                chunk_type=row.chunk_type,
+                content=row.content,
+                distance=None,
                 metadata=row.metadata_,
             )
             for row in rows

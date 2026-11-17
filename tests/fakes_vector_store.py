@@ -55,6 +55,26 @@ class FakeChunkStore:
         return sorted(hits, key=lambda hit: hit.distance)[:k]
 
 
+    async def search_lexical(self, query_text: str, k: int) -> list[SearchHit]:
+        """OR-semantics term overlap: stands in for ``ts_rank_cd`` (no distance, like the Postgres store)."""
+        terms = set(query_text.lower().split())
+        scored = []
+        for document in self.documents:
+            for index, chunk in enumerate(document.chunks):
+                overlap = len(terms & set(chunk.text.lower().split()))
+                if overlap:
+                    hit = SearchHit(
+                        chunk_id=document.id * 1000 + index,
+                        document_id=document.id,
+                        chunk_type=BUDGET_COMPONENT,
+                        content=chunk.text,
+                        distance=None,
+                        metadata=chunk.metadata,
+                    )
+                    scored.append((-overlap, hit.chunk_id, hit))
+        return [hit for _, _, hit in sorted(scored, key=lambda item: item[:2])[:k]]
+
+
 def _cosine_distance(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     return 1 - dot / (math.hypot(*a) * math.hypot(*b))

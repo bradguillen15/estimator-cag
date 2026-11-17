@@ -31,6 +31,12 @@ def test_source_path_is_unique() -> None:
 
 def test_relational_indexes_exist_but_no_vector_index() -> None:
     indexes = {index.name: index for index in ChunkRow.__table__.indexes}
-    assert set(indexes) == {"ix_chunks_document_id", "ix_chunks_chunk_type", "ix_chunks_metadata_gin"}
+    assert set(indexes) == {
+        "ix_chunks_document_id",
+        "ix_chunks_chunk_type",
+        "ix_chunks_metadata_gin",
+        "chunks_content_tsv_idx",
+    }
     assert indexes["ix_chunks_metadata_gin"].dialect_options["postgresql"]["using"] == "gin"
+    assert indexes["chunks_content_tsv_idx"].dialect_options["postgresql"]["using"] == "gin"
     assert all("embedding" not in index.columns for index in indexes.values())
