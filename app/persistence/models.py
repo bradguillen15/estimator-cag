@@ -12,8 +12,8 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import BigInteger, Computed, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import DateTime
 
@@ -86,7 +86,11 @@ class ChunkRow(Base):
     """One embeddable fragment of a document. ``ON DELETE CASCADE``: deleting a document deletes its chunks.
 
     ``embedding`` is nullable so a chunk could be stored first and embedded later; session 8 always writes both
-    in the same transaction. There is deliberately no vector index yet (sequential-scan baseline).
+    in the same transaction. Indexes: HNSW on the halfvec cast of ``embedding`` (migration 0003, expression index
+    created in SQL, not mapped here) and GIN on ``content_tsv`` (migration 0004).
+
+    ``content_tsv`` is a database-generated column (``to_tsvector('english', content)``): ``Computed`` tells
+    SQLAlchemy never to include it in INSERT/UPDATE.
     """
 
     __tablename__ = "chunks"
@@ -94,6 +98,7 @@ class ChunkRow(Base):
         Index("ix_chunks_document_id", "document_id"),
         Index("ix_chunks_chunk_type", "chunk_type"),
         Index("ix_chunks_metadata_gin", "metadata", postgresql_using="gin"),
+        Index("chunks_content_tsv_idx", "content_tsv", postgresql_using="gin"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -108,6 +113,9 @@ class ChunkRow(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    content_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), nullable=True
     )
 
     document: Mapped[DocumentRow] = relationship(back_populates="chunks")

@@ -235,7 +235,7 @@ directly and is mounted without `/api/v1`.
 | Method | Path | Returns |
 |---|---|---|
 | `POST` | `/embeddings/ingest` | `{document_id, chunks_created, embedding_dimension, ingestion_time_ms}`; body `{"source_path", "document_type", "content": Budget}`; **409** `{"detail": "Document already ingested", "document_id"}` when `source_path` exists, **422** invalid budget, **500** embeddings/DB failure or no `OPENAI_API_KEY` |
-| `POST` | `/search` | `{query, k, search_time_ms, results: [{chunk_id, document_id, chunk_type, content, distance, metadata}]}`; body `{"query", "k": 5}` (`k` 1-50, **422** outside); empty corpus = 200 with no results |
+| `POST` | `/search` | `{query, k, mode, rerank, search_time_ms, embed_ms, retrieval_ms, rerank_ms, results: [{chunk_id, document_id, chunk_type, content, distance, rrf_score, rerank_score, metadata}]}`; body `{"query", "k": 5, "mode"?, "rerank"?}` (`k` 1-50, bad `mode` or `k` → **422**); with `rerank` on, `RERANK_TOP_N` hits are returned; empty corpus = 200 with no results |
 
 `scripts/query_examples.py` ingests the whole sample corpus (idempotent: 409s are skipped; 17 budgets → 60
 chunks) and runs five queries (direct match, reformulation, out of domain, ambiguous, very specific), printing
@@ -380,6 +380,17 @@ uv run python -m evals.stress.run --help
 ```
 
 **Cost warning:** it makes real, billed LLM calls; it is never part of pytest or CI.
+
+## Retrieval evaluation (hybrid search + reranking)
+
+`POST /search` accepts `"mode": "vector" | "hybrid"` and `"rerank": true | false` (defaults: `SEARCH_MODE`,
+`RERANK_ENABLED`). `evals/retrieval/` compares the four combinations on a hand-labelled golden set (precision@5 and
+latency). Results and conclusions: [evals/retrieval/REPORT.md](evals/retrieval/REPORT.md).
+
+```bash
+uv run python -m app.embedding_pipeline.verify_reranker   # downloads and checks the cross-encoder
+uv run python -m evals.retrieval.run --repeats 10         # needs Postgres (migrated + ingested) and OPENAI_API_KEY
+```
 
 ## Project structure
 

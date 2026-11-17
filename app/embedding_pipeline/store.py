@@ -47,3 +47,11 @@ class ChunkStore(Protocol):
     async def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
         """The ``k`` chunks nearest to ``query_vector`` by cosine distance, closest first."""
         ...
+
+    async def search_lexical(self, query_text: str, k: int) -> list[SearchHit]:
+        """The ``k`` chunks best matching ``query_text`` by full-text search, best first.
+
+        Terms are OR-ed (a long description would match nothing with AND). ``distance`` is ``None`` on these hits:
+        a lexical match has no cosine distance. A query without searchable terms returns an empty list.
+        """
+        ...

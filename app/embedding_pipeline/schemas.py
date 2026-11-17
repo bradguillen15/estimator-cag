@@ -103,6 +103,14 @@ class SearchRequest(BaseModel):
 
     query: str = Field(min_length=1, max_length=2000, description="Free-text semantic query.")
     k: int = Field(default=5, ge=1, le=50, description="Number of nearest chunks to return.")
+    mode: Literal["vector", "hybrid"] | None = Field(
+        default=None, description="Search mode; omitted = the SEARCH_MODE setting."
+    )
+    rerank: bool | None = Field(
+        default=None,
+        description="Cross-encoder reranking; omitted = the RERANK_ENABLED setting. When on, the response holds "
+        "RERANK_TOP_N hits instead of k.",
+    )
 
 
 class SearchHit(BaseModel):
@@ -112,7 +120,11 @@ class SearchHit(BaseModel):
     document_id: int
     chunk_type: str
     content: str
-    distance: float = Field(description="Cosine distance (lower = more similar).")
+    distance: float | None = Field(
+        default=None, description="Cosine distance (lower = more similar); null for lexical-only hits."
+    )
+    rrf_score: float | None = Field(default=None, description="Reciprocal Rank Fusion score (hybrid mode only).")
+    rerank_score: float | None = Field(default=None, description="Cross-encoder score (when reranked).")
     metadata: dict
 
 
@@ -121,5 +133,10 @@ class SearchResponse(BaseModel):
 
     query: str
     k: int
+    mode: Literal["vector", "hybrid"] = Field(description="Effective search mode.")
+    rerank: bool = Field(description="Whether the cross-encoder reranked the candidates.")
     search_time_ms: int = Field(ge=0)
+    embed_ms: int = Field(ge=0, description="Query embedding time (0 when a precomputed vector was supplied).")
+    retrieval_ms: int = Field(ge=0, description="Database retrieval time (vector, plus lexical and fusion in hybrid).")
+    rerank_ms: int = Field(ge=0, description="Cross-encoder rescoring time (0 when not reranked).")
     results: list[SearchHit]

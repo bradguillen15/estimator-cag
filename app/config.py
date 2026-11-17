@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     presidio_spacy_model: str = "es_core_news_md"
     pseudonym_faker_locale: str = "es_ES"
     pseudonym_hash_salt: str = "change-me-in-prod"
+    # Search (session 10): "vector" = cosine k-NN only; "hybrid" = vector + Postgres full-text fused with RRF.
+    # RERANK_* control the optional cross-encoder second stage: recall RERANK_RECALL_K candidates, keep RERANK_TOP_N.
+    search_mode: Literal["vector", "hybrid"] = "vector"
+    rerank_enabled: bool = False
+    rerank_recall_k: int = Field(default=50, ge=1, le=200)
+    rerank_top_n: int = Field(default=5, ge=1, le=50)
+    rrf_k: int = Field(default=60, ge=1)
+    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     app_env: str
     log_level: str
 

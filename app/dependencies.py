@@ -15,6 +15,7 @@ from app.config import settings
 from app.embedding_pipeline.chunker import JSONStructuralChunker
 from app.embedding_pipeline.embedder import OpenAIEmbedder
 from app.embedding_pipeline.ingest_service import EmbeddingIngestService
+from app.embedding_pipeline.reranker import CrossEncoderReranker
 from app.embedding_pipeline.retriever import SemanticRetriever
 from app.exceptions import UnknownPromptVersionError
 from app.persistence.database import (
@@ -84,12 +85,27 @@ def get_embedding_ingest_service() -> EmbeddingIngestService | None:
 
 
 @lru_cache
+def get_reranker() -> CrossEncoderReranker:
+    """Cross-encoder reranker (session 10). Cheap to build: the model loads lazily on the first rerank."""
+    return CrossEncoderReranker(settings.reranker_model)
+
+
+@lru_cache
 def get_semantic_retriever() -> SemanticRetriever | None:
     """Query side of the vector store; same ``None`` contract as the ingest service."""
     embedder = get_openai_embedder()
     if embedder is None:
         return None
-    return SemanticRetriever(embedder=embedder, store=get_chunk_store())
+    return SemanticRetriever(
+        embedder=embedder,
+        store=get_chunk_store(),
+        reranker=get_reranker(),
+        default_mode=settings.search_mode,
+        default_rerank=settings.rerank_enabled,
+        recall_k=settings.rerank_recall_k,
+        rerank_top_n=settings.rerank_top_n,
+        rrf_k=settings.rrf_k,
+    )
 
 def _get_semantic_cache() -> SemanticCache:
     if not settings.semantic_cache_enabled:

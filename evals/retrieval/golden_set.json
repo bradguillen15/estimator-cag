@@ -1,0 +1,41 @@
+[
+  {
+    "id": "q1",
+    "query": "Online store for a fashion brand with shopping cart, checkout and personalized product recommendations",
+    "relevant_budget_ids": [
+      "BUD-2024-005",
+      "BUD-2024-006",
+      "BUD-2024-017"
+    ]
+  },
+  {
+    "id": "q2",
+    "query": "Mobile banking app with secure OAuth login, account overview and PSD2 open banking compliance",
+    "relevant_budget_ids": [
+      "BUD-2024-001"
+    ]
+  },
+  {
+    "id": "q3",
+    "query": "Telehealth platform where patients book appointments and have video consultations with doctors",
+    "relevant_budget_ids": [
+      "BUD-2024-009"
+    ]
+  },
+  {
+    "id": "q4",
+    "query": "Sensors on factory machines streaming telemetry to predict failures before they happen",
+    "relevant_budget_ids": [
+      "BUD-2024-013",
+      "BUD-2024-015"
+    ]
+  },
+  {
+    "id": "q5",
+    "query": "Payment processing service for merchants with fraud detection and settlement reconciliation",
+    "relevant_budget_ids": [
+      "BUD-2024-003",
+      "BUD-2024-006"
+    ]
+  }
+]
